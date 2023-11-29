@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+package chat_bully;
+
+option java_multiple_files = true;
+option java_package = "com.proto.chat_bully";
+
+
+service Node {
+  rpc SendMessage (MessageRequest) returns (google.protobuf.Empty) {}
+  rpc StartElection (ElectionRequest) returns (ElectionResponse);
+  rpc AnnounceLeader (LeaderAnnouncement) returns (google.protobuf.Empty);
+  rpc Join (JoinRequest) returns (JoinResponse);
+}
+
+message MessageRequest {
+  string message = 1;
+  string senderId = 2;
+}
+
+message ElectionRequest {
+  int32 nodeId = 1;
+}
+
+message ElectionResponse {
+  bool ack = 1;
+}
+
+message LeaderAnnouncement {
+  int32 leaderId = 1;
+}
+
+message JoinResponse {
+  bool ack = 1;
+}
+
+
+message JoinRequest {
+  string hostname = 1;
+  string port = 2;
+}
