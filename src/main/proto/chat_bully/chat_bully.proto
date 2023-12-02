@@ -8,7 +8,7 @@ option java_package = "com.proto.chat_bully";
 
 
 service Node {
-  rpc SendMessage (MessageRequest) returns (google.protobuf.Empty) {}
+  rpc SendMessage (MessageRequest) returns (MessageResponse) {}
   rpc StartElection (ElectionRequest) returns (ElectionResponse);
   rpc AnnounceLeader (LeaderAnnouncement) returns (google.protobuf.Empty);
   rpc Join (JoinRequest) returns (JoinResponse);
@@ -17,6 +17,10 @@ service Node {
 message MessageRequest {
   string message = 1;
   string senderId = 2;
+}
+
+message MessageResponse {
+  bool ack = 1;
 }
 
 message ElectionRequest {

@@ -2,28 +2,28 @@ package com.dsva.client;
 
 import com.dsva.Node;
 import com.dsva.model.Address;
+import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
 import com.proto.chat_bully.MessageRequest;
+import com.proto.chat_bully.MessageResponse;
 import com.proto.chat_bully.NodeGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
-@Data
+
 @Slf4j
-@AllArgsConstructor
-public class Client {
-    private final Address myAddress;
-    private final DSNeighbours myNeighbours;
-    private final Node node;
-
+public record Client(Address myAddress, DSNeighbours myNeighbours, Node node) {
     public void sendClientMessage(int nodeId, String message) {
+        int targetNodePort = myNeighbours.getTargetNodePort(nodeId);
 
-        ManagedChannel channel = ManagedChannelBuilder.forAddress("localhost", myAddress.port())
-                .usePlaintext()
-                .build();
+        if (targetNodePort == -1) {
+            System.out.println("You have probably typed wrong node id. All available nodes: "
+                    + myNeighbours.getKnownNodes());
+            return;
+        }
+
+        ManagedChannel channel = buildManagedChannel(Constants.HOSTNAME, targetNodePort);
 
         NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
 
@@ -32,11 +32,19 @@ public class Client {
                 .setSenderId(String.valueOf(node.getNodeId()))
                 .build();
 
-        stub.sendMessage(request);
+        MessageResponse messageResponse = stub.sendMessage(request);
+        if (messageResponse.getAck()) {
+            System.out.printf("Node with: %d, successfully got a message!%n", nodeId);
+        } else {
+            System.out.println("Node did not respond. Something went wrong.");
+            // leader election
+        }
         channel.shutdown();
     }
 
-    public void join() {
-
+    private ManagedChannel buildManagedChannel(String hostname, int targetNodePort) {
+        return ManagedChannelBuilder.forAddress(hostname, targetNodePort)
+                .usePlaintext()
+                .build();
     }
 }

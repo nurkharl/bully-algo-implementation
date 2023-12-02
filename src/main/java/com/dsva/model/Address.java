@@ -1,4 +1,4 @@
 package com.dsva.model;
 
-public record Address(String hostname, Integer port) {
+public record Address(String hostname, int port, int nodeId) {
 }

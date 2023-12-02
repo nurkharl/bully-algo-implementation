@@ -12,22 +12,18 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Objects;
 
 @Slf4j
 public class Node {
-    @Getter private final Integer nodeId;
+    @Getter
+    private final Integer nodeId;
     private Server server;
-    @Getter private Client client;
-    private boolean isLeader;
+    @Getter
+    private Client client;
     private final ConsoleHandlerService consoleHandlerService;
     private Thread consoleHandlerThread;
-
-    public Node(String[] args) {
-        // TODO arg validation
-        this.nodeId = Integer.parseInt(args[0]);
-        this.consoleHandlerService = new ConsoleHandlerService(this);
-        this.setUpNodeNetworkProperties(nodeId);
-    }
 
     public static void main(String[] args) throws IOException, InterruptedException {
         Node node = new Node(args);
@@ -36,13 +32,19 @@ public class Node {
         node.server.awaitTermination();
     }
 
+    public Node(String[] args) {
+        this.nodeId = Integer.parseInt(args[0]);
+        this.consoleHandlerService = new ConsoleHandlerService(this);
+        this.setUpNodeNetworkProperties(nodeId);
+    }
+
     private void startConsoleHandler() {
         consoleHandlerThread = new Thread(consoleHandlerService);
         consoleHandlerThread.start();
     }
 
     public void startServer() throws IOException {
-        int port = this.client.getMyAddress().port();
+        int port = this.client.myAddress().port();
 
         server = ServerBuilder.forPort(port)
                 .addService(new ServerImpl(this))
@@ -68,22 +70,34 @@ public class Node {
 
     private void setUpNodeNetworkProperties(Integer nodeId) {
         int generatedPort = Constants.DEFAULT_PORT + nodeId;
-        Address myAddress = new Address(Constants.HOSTNAME, generatedPort);
+        Address myAddress = new Address(Constants.HOSTNAME, generatedPort, this.getNodeId());
 
         client = new Client(
                 myAddress,
-                new DSNeighbours(
-                        myAddress,
-                        myAddress,
-                        myAddress,
-                        myAddress
-                ),
+                setUpNodeNeighboursAddresses(myAddress),
                 this
         );
     }
 
+    private DSNeighbours setUpNodeNeighboursAddresses(Address myAddress) {
+        HashSet<Address> neighboursNodesIds = new HashSet<>();
+
+        for (Integer neighbourNodeId : Constants.initialNodesIdsSet) {
+            if (Objects.equals(neighbourNodeId, this.getNodeId())) {
+                continue;
+            }
+            neighboursNodesIds.add(new Address(
+                    Constants.HOSTNAME,
+                    Constants.DEFAULT_PORT + neighbourNodeId,
+                    neighbourNodeId
+            ));
+        }
+
+        return new DSNeighbours(neighboursNodesIds, myAddress);
+    }
+
     public void printStatus() {
         log.info(String.format("Node id: %d", nodeId));
-        log.info(client.getMyNeighbours().toString());
+        log.info(client.myNeighbours().toString());
     }
 }

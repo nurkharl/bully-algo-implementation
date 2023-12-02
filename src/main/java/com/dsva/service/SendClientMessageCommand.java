@@ -19,7 +19,7 @@ public class SendClientMessageCommand implements CommandHandler {
 
         try {
             int nodeId = Integer.parseInt(arguments[0]);
-            String message = arguments[1].trim();
+            String message = String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length));
 
             if (message.isEmpty()) {
                 log.warn("Message is blank or empty. Please write something! :)");
