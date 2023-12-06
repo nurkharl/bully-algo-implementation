@@ -37,10 +37,22 @@ message LeaderAnnouncement {
 
 message JoinResponse {
   bool ack = 1;
+  Address leader = 2;
+  AvailableNodesAddressesList availableNodesAddressesList = 3;
 }
-
 
 message JoinRequest {
   string hostname = 1;
-  string port = 2;
+  int32 port = 2;
+  int32 nodeId = 3;
+}
+
+message Address {
+  string hostname = 1;
+  int32 port = 2;
+  int32 nodeId = 3;
+}
+
+message AvailableNodesAddressesList {
+  repeated Address addresses = 1;
 }

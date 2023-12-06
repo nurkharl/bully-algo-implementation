@@ -12,8 +12,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Objects;
 
 @Slf4j
 public class Node {
@@ -22,7 +20,7 @@ public class Node {
     private Server server;
     @Getter
     private Client client;
-    private final ConsoleHandlerService consoleHandlerService;
+    private final ConsoleHandlerService consoleHandlerService = new ConsoleHandlerService(this);
     private Thread consoleHandlerThread;
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -34,7 +32,6 @@ public class Node {
 
     public Node(String[] args) {
         this.nodeId = Integer.parseInt(args[0]);
-        this.consoleHandlerService = new ConsoleHandlerService(this);
         this.setUpNodeNetworkProperties(nodeId);
     }
 
@@ -71,30 +68,18 @@ public class Node {
     private void setUpNodeNetworkProperties(Integer nodeId) {
         int generatedPort = Constants.DEFAULT_PORT + nodeId;
         Address myAddress = new Address(Constants.HOSTNAME, generatedPort, this.getNodeId());
+        DSNeighbours myNeighbours = new DSNeighbours(myAddress);
 
         client = new Client(
                 myAddress,
-                setUpNodeNeighboursAddresses(myAddress),
+                myNeighbours,
                 this
         );
+
+
+        client.joinNetworkTopology();
     }
 
-    private DSNeighbours setUpNodeNeighboursAddresses(Address myAddress) {
-        HashSet<Address> neighboursNodesIds = new HashSet<>();
-
-        for (Integer neighbourNodeId : Constants.initialNodesIdsSet) {
-            if (Objects.equals(neighbourNodeId, this.getNodeId())) {
-                continue;
-            }
-            neighboursNodesIds.add(new Address(
-                    Constants.HOSTNAME,
-                    Constants.DEFAULT_PORT + neighbourNodeId,
-                    neighbourNodeId
-            ));
-        }
-
-        return new DSNeighbours(neighboursNodesIds, myAddress);
-    }
 
     public void printStatus() {
         log.info(String.format("Node id: %d", nodeId));
