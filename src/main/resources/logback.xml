@@ -5,7 +5,14 @@
         </encoder>
     </appender>
 
+    <!-- Root logger level is set to DEBUG -->
     <root level="debug">
         <appender-ref ref="STDOUT" />
     </root>
+
+    <!-- Setting log level for gRPC to WARN to reduce verbosity -->
+    <logger name="io.grpc" level="WARN"/>
+
+    <!-- Setting log level for Netty to WARN -->
+    <logger name="io.netty" level="WARN"/>
 </configuration>

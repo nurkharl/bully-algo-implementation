@@ -1,6 +1,7 @@
 package com.dsva.service;
 
 import com.dsva.Node;
+import com.dsva.exception.NodeNotFoundException;
 import com.dsva.pattern.command.CommandHandler;
 import lombok.extern.slf4j.Slf4j;
 
@@ -26,9 +27,11 @@ public class SendClientMessageCommand implements CommandHandler {
                 return;
             }
 
-            node.getClient().sendClientMessage(nodeId, message);
+            node.getClient().sendMessageViaLeader(nodeId, message);
         } catch (NumberFormatException e) {
             log.error("Node ID should be number! Try again!");
+        } catch (NodeNotFoundException e) {
+            System.out.println("You are trying to send a message to a Node not existing in this topology. Print s to see available nodes.");
         }
     }
 

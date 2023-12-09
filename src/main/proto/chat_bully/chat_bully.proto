@@ -16,7 +16,8 @@ service Node {
 
 message MessageRequest {
   string message = 1;
-  string senderId = 2;
+  int32 senderId = 2;
+  int32 receiverId = 3;
 }
 
 message MessageResponse {

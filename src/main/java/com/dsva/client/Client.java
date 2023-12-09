@@ -12,52 +12,95 @@ import io.grpc.ManagedChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
-public record Client(Address myAddress, DSNeighbours myNeighbours, Node node) {
-    public void sendClientMessage(int nodeId, String message) {
-        int targetNodePort;
+public record Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) {
+    public void sendMessageViaLeader(int receiverNodeId, String message) throws NodeNotFoundException {
+        boolean viaLeader = !this.myNode.isLeader();
+        boolean messageSent = false;
+        int retryCount = 0;
 
-        try {
-            targetNodePort = myNeighbours.getTargetNodePort(nodeId);
-        } catch (NodeNotFoundException e) {
-            System.out.println("You have probably typed wrong node id. All available nodes: "
-                    + myNeighbours.getKnownNodes());
-            return;
+        while (!messageSent && retryCount < Constants.MAX_RETRIES) {
+            messageSent = sendGrpcMessage(receiverNodeId, myNode.getNodeId(), message, viaLeader);
+            if (!messageSent) {
+                log.warn("Retrying message send. Attempt: {}", retryCount + 1);
+                try {
+                    Thread.sleep(Constants.RETRY_DELAY_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("Thread interrupted during retry delay", e);
+                }
+            }
+            retryCount++;
         }
 
-        ManagedChannel channel = buildManagedChannel(targetNodePort);
-        NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
-
-        MessageRequest request = MessageRequest.newBuilder()
-                .setMessage(message)
-                .setSenderId(String.valueOf(node.getNodeId()))
-                .build();
-
-        MessageResponse messageResponse = stub.sendMessage(request);
-        if (messageResponse.getAck()) {
-            System.out.printf("Node with: %d, successfully got a message!%n", nodeId);
-        } else {
-            System.out.println("Receiver node did not respond. Something went wrong.");
+        if (!messageSent) {
+            log.error("Failed to send message after {} attempts", Constants.MAX_RETRIES);
         }
-        channel.shutdown();
+    }
+
+
+    public void distributeMessage(int receiverNodeId, int senderNodeId, String message) throws NodeNotFoundException {
+        if (sendGrpcMessage(receiverNodeId, senderNodeId, message, false)) {
+            // TODO
+        }
     }
 
     public void joinNetworkTopology() {
-        int expectedNodeIdToBeAlive = Constants.EXPECTED_ENTRY_POINT_NODE_ID;
+        if (myNode.getNodeId() == Constants.EXPECTED_ENTRY_POINT_NODE_ID) {
+            log.info("I am the leader. No need to join.");
+            return;
+        }
 
-        while (expectedNodeIdToBeAlive > 0 && expectedNodeIdToBeAlive != node.getNodeId()) {
+        for (int nodeId = Constants.EXPECTED_ENTRY_POINT_NODE_ID; nodeId > 0; nodeId--) {
+            if (nodeId == myNode.getNodeId()) {
+                continue;
+            }
 
-            if (joinNetworkTopology(expectedNodeIdToBeAlive)) {
-                log.info("Joined network topology successfully. Node: {}, Topology: {}", node.getNodeId(),
-                        myNeighbours.toString());
+            if (joinNetworkTopology(nodeId)) {
+                log.info("Joined network topology successfully. Node: {}, Topology: {}", myNode.getNodeId(), myNeighbours.toString());
                 return;
             }
-            expectedNodeIdToBeAlive--;
         }
+
         log.warn("Failed to join network topology after trying all known nodes.");
     }
+
+
+    private boolean sendGrpcMessage(int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
+        int targetNodeId = viaLeader ? myNeighbours.getLeaderAddress().nodeId() : receiverNodeId;
+        int targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
+        ManagedChannel channel = buildManagedChannel(targetNodePort);
+
+        try {
+            NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
+            MessageRequest request = buildMessageRequest(message, senderNodeId, receiverNodeId);
+            MessageResponse messageResponse = stub.sendMessage(request);
+
+            if (messageResponse.getAck()) {
+                log.info("Node with id: {}, successfully received a message", receiverNodeId);
+                return true;
+            } else {
+                log.error("Message delivery failed or false ack received.");
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error sending gRPC message: {}", e.getMessage());
+            return false;
+        } finally {
+            channel.shutdown();
+
+            try {
+                channel.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("Interrupted while waiting for the channel to terminate", e);
+            }
+        }
+    }
+
 
     private boolean joinNetworkTopology(int expectedNodeIdToBeAlive) {
         int targetNodePort = Utils.getNodePortFromNodeId(expectedNodeIdToBeAlive);
@@ -77,7 +120,7 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node node) {
                 return false;
             }
         } catch (Exception e) {
-            log.error("Error joining network topology through node {}: {}", node.getNodeId(), e.getMessage());
+            log.error("Error joining network topology through myNode {}: {}", myNode.getNodeId(), e.getMessage());
             return false;
         }
     }
@@ -86,12 +129,12 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node node) {
         return JoinRequest.newBuilder()
                 .setHostname(Constants.HOSTNAME)
                 .setPort(this.myAddress.port())
-                .setNodeId(node.getNodeId())
+                .setNodeId(myNode.getNodeId())
                 .build();
     }
 
     private void setUpDSNeighbours(com.proto.chat_bully.Address leader, AvailableNodesAddressesList availableNodesAddressesList) {
-        log.info("Setting up new neighbours. New leader node ID: {}", leader.getNodeId());
+        log.info("Setting up new neighbours. New leader myNode ID: {}", leader.getNodeId());
         // TODO check if ID is higher
         myNeighbours.setLeaderAddress(convertProtoModelToModelAddress(leader));
 
@@ -111,6 +154,14 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node node) {
     private ManagedChannel buildManagedChannel(int targetNodePort) {
         return ManagedChannelBuilder.forAddress(Constants.HOSTNAME, targetNodePort)
                 .usePlaintext()
+                .build();
+    }
+
+    private MessageRequest buildMessageRequest(String message, int senderNodeId, int receiverNodeId) {
+        return MessageRequest.newBuilder()
+                .setMessage(message)
+                .setSenderId(senderNodeId)
+                .setReceiverId(receiverNodeId)
                 .build();
     }
 }

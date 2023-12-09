@@ -10,6 +10,6 @@ public class HelpCommand implements CommandHandler {
         System.out.println("? - this help");
         System.out.println("h - send message to Next neighbour");
         System.out.println("h <id of target node> <Message>");
-        System.out.println("s - print node status");
+        System.out.println("s - print this node status. Status includes network topology");
     }
 }

@@ -1,6 +1,7 @@
 package com.dsva.server;
 
 import com.dsva.Node;
+import com.dsva.exception.NodeNotFoundException;
 import com.dsva.model.Address;
 import com.dsva.model.Constants;
 import com.proto.chat_bully.*;
@@ -14,12 +15,23 @@ import java.util.HashSet;
 @AllArgsConstructor
 public class ServerImpl extends NodeGrpc.NodeImplBase {
 
-    private final Node node;
+    private final Node myNode;
 
     @Override
     public void sendMessage(MessageRequest request, StreamObserver<MessageResponse> responseObserver) {
-        log.info("Received message from Node ID: {}. Content: '{}'", request.getSenderId(), request.getMessage());
-
+        if (myNode.isLeader() && request.getReceiverId() != myNode.getNodeId()) {
+            try {
+                myNode.getClient().distributeMessage(request.getReceiverId(), request.getSenderId(), request.getMessage());
+            } catch (NodeNotFoundException e) {
+                sendAcknowledgment(responseObserver, MessageResponse.newBuilder()
+                        .setAck(false)
+                        .build());
+                return;
+            }
+        } else {
+            log.info("Received message from Node ID: {} to Node ID {}. Content: '{}'", request.getSenderId(),
+                    request.getReceiverId(), request.getMessage());
+        }
         sendAcknowledgment(responseObserver, MessageResponse.newBuilder()
                 .setAck(true)
                 .build());
@@ -30,7 +42,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
         int candidateId = request.getNodeId();
 
         ElectionResponse electionResponse = ElectionResponse.newBuilder()
-                .setAck(candidateId <= node.getNodeId())
+                .setAck(candidateId <= myNode.getNodeId())
                 .build();
 
         responseObserver.onNext(electionResponse);
@@ -47,7 +59,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
                 request.getLeaderId()
         );
 
-        node.getClient().myNeighbours().setLeaderAddress(leaderAddress);
+        myNode.getClient().myNeighbours().setLeaderAddress(leaderAddress);
         log.info("New leader with ID: {}, on port: {}", request.getLeaderId(), leaderPort);
         responseObserver.onCompleted();
     }
@@ -55,7 +67,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
     @Override
     public void join(JoinRequest request, StreamObserver<JoinResponse> responseObserver) {
         int joiningNodeId = request.getPort() - Constants.DEFAULT_PORT;
-        log.info("Join request from node ID: {} with port: {}", joiningNodeId, request.getPort());
+        log.info("Join request from myNode ID: {} with port: {}", joiningNodeId, request.getPort());
 
         JoinResponse.Builder joinResponse = JoinResponse.newBuilder();
 
@@ -78,22 +90,21 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
     private void addNewNodeToTopology(JoinRequest request) {
         Address newNode = new Address(request.getHostname(), request.getPort(), request.getNodeId());
-        node.getClient().myNeighbours().addNewNode(newNode);
-        log.info("Added new node to topology: {}", newNode);
+        myNode.getClient().myNeighbours().addNewNode(newNode);
     }
 
     private boolean isValidJoinRequest(int joiningNodeId) {
-        if (node.getNodeId() == joiningNodeId) {
+        if (myNode.getNodeId() == joiningNodeId) {
             log.warn("Node with the same ID as yours trying to join.");
             return false;
         }
 
-        if (node.getNodeId() < 1) {
-            log.warn("Invalid node id: {}", node.getNodeId());
+        if (myNode.getNodeId() < 1) {
+            log.warn("Invalid myNode id: {}", myNode.getNodeId());
             return false;
         }
 
-        if (node.getClient().myNeighbours().isNodePresent(joiningNodeId)) {
+        if (myNode.getClient().myNeighbours().isNodePresent(joiningNodeId)) {
             log.warn("Node is already in topology! Not adding.");
             return false;
         }
@@ -103,20 +114,20 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
     private com.proto.chat_bully.Address getCurrentProtoLeader() {
         return com.proto.chat_bully.Address.newBuilder()
                 .setHostname(Constants.HOSTNAME)
-                .setPort(node.getClient().myNeighbours().getLeaderAddress().port())
-                .setNodeId(node.getClient().myNeighbours().getLeaderAddress().nodeId())
+                .setPort(myNode.getClient().myNeighbours().getLeaderAddress().port())
+                .setNodeId(myNode.getClient().myNeighbours().getLeaderAddress().nodeId())
                 .build();
     }
 
     private AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses() {
-        HashSet<Address> currentAddresses = node.getClient().myNeighbours().getKnownNodes();
+        HashSet<Address> currentAddresses = myNode.getClient().myNeighbours().getKnownNodes();
         AvailableNodesAddressesList.Builder availableNodesAddressesList = AvailableNodesAddressesList.newBuilder();
 
         for (Address nodeAddress : currentAddresses) {
             availableNodesAddressesList.addAddresses(buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
         }
 
-        availableNodesAddressesList.addAddresses(buildProtoAddress(node.getClient().myAddress().port(), node.getNodeId()));
+        availableNodesAddressesList.addAddresses(buildProtoAddress(myNode.getClient().myAddress().port(), myNode.getNodeId()));
 
         return availableNodesAddressesList.build();
     }

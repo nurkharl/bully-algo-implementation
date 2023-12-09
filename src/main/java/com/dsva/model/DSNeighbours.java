@@ -41,21 +41,22 @@ public class DSNeighbours {
             }
         }
 
-        throw new NodeNotFoundException("Trying to access not existing target port. Maybe this node is dead.");
+        throw new NodeNotFoundException("Trying to access not existing target port.");
     }
 
     public void addNewNode(@NonNull Address address) {
         if (isAddressValid(address)) {
             knownNodes.add(address);
-            log.info("Adding new node{hostname:{}, port:{}, nodeId:{}}",
+            log.info("Adding new Node{hostname:{}, port:{}, nodeId:{}}",
                     address.hostname(), address.port(), address.nodeId());
+            log.info("Topology after adding: {}", knownNodes);
         }
     }
 
     public void removeNode(@NonNull Address address) {
         if (isAddressValid(address)) {
             knownNodes.remove(address);
-            log.info("Removing node{hostname:{}, port:{}, nodeId:{}}",
+            log.info("Removing myNode{hostname:{}, port:{}, nodeId:{}}",
                     address.hostname(), address.port(), address.nodeId());
         }
     }

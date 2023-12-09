@@ -51,7 +51,7 @@ public class ConsoleHandlerService implements Runnable {
     @Override
     public void run() {
         handleCommand("?", new String[]{});
-        System.out.println("You are node with id: " + node.getNodeId());
+        System.out.println("You are myNode with id: " + node.getNodeId());
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
             while (true) {
                 System.out.print(System.lineSeparator() + "cmd > ");
