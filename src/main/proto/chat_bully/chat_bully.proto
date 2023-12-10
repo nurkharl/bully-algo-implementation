@@ -10,9 +10,10 @@ option java_package = "com.proto.chat_bully";
 service Node {
   rpc SendMessage (MessageRequest) returns (MessageResponse) {}
   rpc StartElection (ElectionRequest) returns (ElectionResponse);
-  rpc AnnounceLeader (LeaderAnnouncement) returns (google.protobuf.Empty);
+  rpc AnnounceLeader (LeaderAnnouncementRequest) returns (LeaderAnnouncementResponse);
   rpc UpdateTopology (UpdateTopologyRequest) returns (UpdateTopologyResponse);
   rpc Join (JoinRequest) returns (JoinResponse);
+  rpc IsNodeAlive(AliveRequest) returns (AliveResponse);
 }
 
 message MessageRequest {
@@ -33,8 +34,12 @@ message ElectionResponse {
   bool ack = 1;
 }
 
-message LeaderAnnouncement {
+message LeaderAnnouncementRequest {
   int32 leaderId = 1;
+}
+
+message LeaderAnnouncementResponse {
+  bool ack = 1;
 }
 
 message JoinResponse {
@@ -64,5 +69,13 @@ message UpdateTopologyRequest {
 }
 
 message UpdateTopologyResponse {
+  bool ack = 1;
+}
+
+message AliveRequest {
+  int32 senderNodeID = 1;
+}
+
+message AliveResponse {
   bool ack = 1;
 }

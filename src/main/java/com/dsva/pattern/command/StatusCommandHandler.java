@@ -1,9 +1,8 @@
-package com.dsva.service;
+package com.dsva.pattern.command;
 
 import com.dsva.Node;
-import com.dsva.pattern.command.CommandHandler;
 
-public class StatusCommand implements CommandHandler {
+public class StatusCommandHandler implements CommandHandler {
     @Override
     public void handle(String[] arguments, Node node) {
         node.printStatus();

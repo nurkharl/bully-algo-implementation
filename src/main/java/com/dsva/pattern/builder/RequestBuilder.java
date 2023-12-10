@@ -1,10 +1,7 @@
 package com.dsva.pattern.builder;
 
 import com.dsva.model.Constants;
-import com.proto.chat_bully.AvailableNodesAddressesList;
-import com.proto.chat_bully.JoinRequest;
-import com.proto.chat_bully.MessageRequest;
-import com.proto.chat_bully.UpdateTopologyRequest;
+import com.proto.chat_bully.*;
 
 public class RequestBuilder {
 
@@ -31,6 +28,18 @@ public class RequestBuilder {
     public static UpdateTopologyRequest buildUpdateTopologyRequest(AvailableNodesAddressesList availableNodesAddressesList) {
         return UpdateTopologyRequest.newBuilder()
                 .setAvailableNodesAddressesList(availableNodesAddressesList)
+                .build();
+    }
+
+    public static AliveRequest buildAliveRequest(int senderNodeId) {
+        return AliveRequest.newBuilder()
+                .setSenderNodeID(senderNodeId)
+                .build();
+    }
+
+    public static LeaderAnnouncementRequest buildLeaderAnnouncementRequest(int leaderId) {
+        return LeaderAnnouncementRequest.newBuilder()
+                .setLeaderId(leaderId)
                 .build();
     }
 }

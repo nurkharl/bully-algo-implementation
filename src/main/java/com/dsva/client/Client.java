@@ -6,31 +6,41 @@ import com.dsva.model.Address;
 import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
 import com.dsva.pattern.builder.RequestBuilder;
+import com.dsva.service.LeaderElectionService;
+import com.dsva.service.MessageService;
 import com.dsva.service.TopologyService;
 import com.dsva.util.Utils;
-import com.proto.chat_bully.*;
+import com.proto.chat_bully.AvailableNodesAddressesList;
+import com.proto.chat_bully.JoinRequest;
+import com.proto.chat_bully.JoinResponse;
+import com.proto.chat_bully.NodeGrpc;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
-import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
 public class Client {
 
-    @Getter private final Address myAddress;
-    @Getter private final DSNeighbours myNeighbours;
+    @Getter
+    private final Address myAddress;
+    @Getter
+    private final DSNeighbours myNeighbours;
     private final Node myNode;
-    @Setter private TopologyService topologyService;
+    @Setter
+    private TopologyService topologyService;
+    private final MessageService messageService;
+    private final LeaderElectionService leaderElectionService;
 
     public Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) {
         this.myAddress = myAddress;
         this.myNeighbours = myNeighbours;
         this.myNode = myNode;
+        this.messageService = new MessageService(this.myNeighbours);
+        this.leaderElectionService = new LeaderElectionService(this.myNeighbours, this.myNode);
     }
 
     public void sendMessageViaLeader(int receiverNodeId, String message) throws NodeNotFoundException {
@@ -39,11 +49,11 @@ public class Client {
         int retryCount = 0;
 
         while (!messageSent && retryCount < Constants.MAX_RETRIES) {
-            messageSent = sendGrpcMessage(receiverNodeId, myNode.getNodeId(), message, viaLeader);
+            messageSent = messageService.sendGrpcMessage(receiverNodeId, myNode.getNodeId(), message, viaLeader);
             if (!messageSent) {
                 log.warn("Retrying message send. Attempt: {}", retryCount + 1);
                 try {
-                    Thread.sleep(Constants.RETRY_DELAY_MS);
+                    Thread.sleep(Constants.MAX_ACCEPTABLE_DELAY);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     log.error("Thread interrupted during retry delay", e);
@@ -54,12 +64,12 @@ public class Client {
 
         if (!messageSent) {
             log.error("Failed to send message after {} attempts", Constants.MAX_RETRIES);
+            initiateElection();
         }
     }
 
-
     public void distributeMessage(int receiverNodeId, int senderNodeId, String message) throws NodeNotFoundException {
-        if (sendGrpcMessage(receiverNodeId, senderNodeId, message, false)) {
+        if (messageService.sendGrpcMessage(receiverNodeId, senderNodeId, message, false)) {
             // TODO
         }
     }
@@ -100,38 +110,8 @@ public class Client {
         }
     }
 
-
-    private boolean sendGrpcMessage(int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
-        int targetNodeId = viaLeader ? myNeighbours.getLeaderAddress().nodeId() : receiverNodeId;
-        int targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
-
-        try {
-            NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
-            MessageRequest request = RequestBuilder.buildMessageRequest(message, senderNodeId, receiverNodeId);
-
-            MessageResponse messageResponse = stub.sendMessage(request);
-
-            if (messageResponse.getAck()) {
-                log.info("Node with id: {}, successfully received a message", receiverNodeId);
-                return true;
-            } else {
-                log.error("Message delivery failed or false ack received.");
-                return false;
-            }
-        } catch (Exception e) {
-            log.error("Error sending gRPC message: {}", e.getMessage());
-            return false;
-        } finally {
-            channel.shutdown();
-
-            try {
-                channel.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.error("Interrupted while waiting for the channel to terminate", e);
-            }
-        }
+    public void initiateElection() {
+        leaderElectionService.initiateElection();
     }
 
 

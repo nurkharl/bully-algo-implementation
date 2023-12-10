@@ -2,6 +2,9 @@ package com.dsva.service;
 
 import com.dsva.Node;
 import com.dsva.pattern.command.CommandHandler;
+import com.dsva.pattern.command.HelpCommandHandler;
+import com.dsva.pattern.command.SendClientMessageCommandHandler;
+import com.dsva.pattern.command.StatusCommandHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -32,9 +35,9 @@ public class ConsoleHandlerService implements Runnable {
     }
 
     private void initializeCommands() {
-        commandHandlers.put("?", new HelpCommand());
-        commandHandlers.put("h", new SendClientMessageCommand());
-        commandHandlers.put("s", new StatusCommand());
+        commandHandlers.put("?", new HelpCommandHandler());
+        commandHandlers.put("h", new SendClientMessageCommandHandler());
+        commandHandlers.put("s", new StatusCommandHandler());
     }
 
     private void parseCommandLine(String commandline) {

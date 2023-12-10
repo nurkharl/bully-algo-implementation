@@ -1,7 +1,9 @@
 package com.dsva.model;
 
 import com.dsva.exception.NodeNotFoundException;
+import com.dsva.pattern.builder.ProtoModelBuilder;
 import com.dsva.util.Utils;
+import com.proto.chat_bully.AvailableNodesAddressesList;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
@@ -41,7 +43,7 @@ public class DSNeighbours {
             }
         }
 
-        throw new NodeNotFoundException("Trying to access not existing target port.");
+        throw new NodeNotFoundException("Trying to access not existing target port: " + expectedTargetPort);
     }
 
     public void addNewNode(@NonNull Address address) {
@@ -67,6 +69,23 @@ public class DSNeighbours {
 
     public boolean isNodePresent(int nodeId) {
         return knownNodes.stream().anyMatch(node -> node.nodeId() == nodeId);
+    }
+
+    public com.proto.chat_bully.Address getCurrentProtoLeader() {
+        return ProtoModelBuilder.buildProtoLeader(this);
+    }
+
+    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses(int myPort, int myNodeId) {
+        HashSet<Address> currentAddresses = getKnownNodes();
+        AvailableNodesAddressesList.Builder availableNodesAddressesList = AvailableNodesAddressesList.newBuilder();
+
+        for (Address nodeAddress : currentAddresses) {
+            availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
+        }
+
+        availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myPort, myNodeId));
+
+        return availableNodesAddressesList.build();
     }
 
     private boolean isAddressValid(Address address) {

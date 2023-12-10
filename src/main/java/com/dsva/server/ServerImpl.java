@@ -43,14 +43,14 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
                 .setAck(candidateId <= myNode.getNodeId())
                 .build();
 
-        responseObserver.onNext(electionResponse);
-        responseObserver.onCompleted();
+        Utils.sendAcknowledgment(responseObserver, electionResponse);
     }
 
     @Override
-    public void announceLeader(LeaderAnnouncement request, StreamObserver<com.google.protobuf.Empty> responseObserver) {
+    public void announceLeader(LeaderAnnouncementRequest request, StreamObserver<LeaderAnnouncementResponse> responseObserver) {
         log.info("Got announce leader request! Setting a new leader...");
         int leaderPort = Constants.DEFAULT_PORT + request.getLeaderId();
+
         Address leaderAddress = new Address(
                 Constants.HOSTNAME,
                 leaderPort,
@@ -59,8 +59,14 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
         myNode.getClient().getMyNeighbours().setLeaderAddress(leaderAddress);
         log.info("New leader with ID: {}, on port: {}", request.getLeaderId(), leaderPort);
-        responseObserver.onCompleted();
+        Utils.sendAcknowledgment(responseObserver, ResponseBuilder.buildLeaderAnnouncementResponse(true));
     }
+
+    @Override
+    public void isNodeAlive(AliveRequest request, StreamObserver<AliveResponse> responseObserver) {
+        Utils.sendAcknowledgment(responseObserver, ResponseBuilder.buildALiveResponse(true));
+    }
+
 
     @Override
     public void join(JoinRequest request, StreamObserver<JoinResponse> responseObserver) {

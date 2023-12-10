@@ -1,8 +1,6 @@
 package com.dsva.pattern.builder;
 
-import com.proto.chat_bully.AvailableNodesAddressesList;
-import com.proto.chat_bully.JoinResponse;
-import com.proto.chat_bully.MessageResponse;
+import com.proto.chat_bully.*;
 
 public class ResponseBuilder {
     private ResponseBuilder() { throw new UnsupportedOperationException(); }
@@ -17,14 +15,20 @@ public class ResponseBuilder {
                 .build();
     }
 
-    public static JoinResponse buildJoinResponse(boolean ack) {
-        return JoinResponse.newBuilder()
+    public static MessageResponse buildMessageResponse(boolean ack) {
+        return MessageResponse.newBuilder()
                 .setAck(ack)
                 .build();
     }
 
-    public static MessageResponse buildMessageResponse(boolean ack) {
-        return MessageResponse.newBuilder()
+    public static AliveResponse buildALiveResponse(boolean ack) {
+        return AliveResponse.newBuilder()
+                .setAck(ack)
+                .build();
+    }
+
+    public static LeaderAnnouncementResponse buildLeaderAnnouncementResponse(boolean ack) {
+        return LeaderAnnouncementResponse.newBuilder()
                 .setAck(ack)
                 .build();
     }

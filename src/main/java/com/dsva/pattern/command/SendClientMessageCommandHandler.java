@@ -1,14 +1,13 @@
-package com.dsva.service;
+package com.dsva.pattern.command;
 
 import com.dsva.Node;
 import com.dsva.exception.NodeNotFoundException;
-import com.dsva.pattern.command.CommandHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 
 @Slf4j
-public class SendClientMessageCommand implements CommandHandler {
+public class SendClientMessageCommandHandler implements CommandHandler {
 
     private static final int EXPECTED_ARGUMENTS = 2;
 

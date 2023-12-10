@@ -47,28 +47,7 @@ public class TopologyService {
 
     public void addNewNodeToTopology(JoinRequest request) {
         Address newNodeAddress = new Address(request.getHostname(), request.getPort(), request.getNodeId());
-        myNode.getClient().getMyNeighbours().addNewNode(newNodeAddress);
-    }
-
-    public com.proto.chat_bully.Address getCurrentProtoLeader() {
-        return com.proto.chat_bully.Address.newBuilder()
-                .setHostname(Constants.HOSTNAME)
-                .setPort(myNeighbours.getLeaderAddress().port())
-                .setNodeId(myNeighbours.getLeaderAddress().nodeId())
-                .build();
-    }
-
-    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses() {
-        HashSet<Address> currentAddresses = myNeighbours.getKnownNodes();
-        AvailableNodesAddressesList.Builder availableNodesAddressesList = AvailableNodesAddressesList.newBuilder();
-
-        for (Address nodeAddress : currentAddresses) {
-            availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
-        }
-
-        availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myNode.getClient().getMyAddress().port(), myNode.getNodeId()));
-
-        return availableNodesAddressesList.build();
+        myNeighbours.addNewNode(newNodeAddress);
     }
 
     public void updateNodeTopology(Address address) throws NodeNotFoundException {
@@ -78,7 +57,7 @@ public class TopologyService {
         try  {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             UpdateTopologyRequest request = RequestBuilder.buildUpdateTopologyRequest(
-                    getCurrentAvailableNodesProtoAddresses());
+                    myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(), this.myNode.getNodeId()));
             UpdateTopologyResponse response = stub.updateTopology(request);
 
             if (!response.getAck()) {
@@ -94,7 +73,7 @@ public class TopologyService {
     private boolean isValidJoinRequest(JoinRequest request) {
         int joiningNodeId = request.getPort() - Constants.DEFAULT_PORT;
         return myNode.getNodeId() != joiningNodeId && myNode.getNodeId() >= 1 &&
-                !myNode.getClient().getMyNeighbours().isNodePresent(joiningNodeId);
+                !myNeighbours.isNodePresent(joiningNodeId);
     }
 
     private void processJoinRequest(JoinRequest request, StreamObserver<JoinResponse> responseObserver) {
@@ -105,8 +84,8 @@ public class TopologyService {
 
     private void sendPositiveAcknowledgment(StreamObserver<JoinResponse> responseObserver) {
         JoinResponse joinResponse = ResponseBuilder.buildJoinResponse(true,
-                this.getCurrentProtoLeader(),
-                this.getCurrentAvailableNodesProtoAddresses()
+                myNeighbours.getCurrentProtoLeader(),
+                myNeighbours.getCurrentAvailableNodesProtoAddresses(myNode.getClient().getMyAddress().port(), myNode.getNodeId())
         );
         Utils.sendAcknowledgment(responseObserver, joinResponse);
     }
