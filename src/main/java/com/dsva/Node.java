@@ -6,6 +6,7 @@ import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
 import com.dsva.server.ServerImpl;
 import com.dsva.service.ConsoleHandlerService;
+import com.dsva.service.TopologyService;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.Getter;
@@ -18,12 +19,15 @@ import java.io.IOException;
 public class Node {
     @Getter
     private final Integer nodeId;
-    @Getter @Setter
+    @Getter
+    @Setter
     private boolean isLeader;
     private Server server;
     @Getter
     private Client client;
     private final ConsoleHandlerService consoleHandlerService = new ConsoleHandlerService(this);
+    @Setter
+    private TopologyService topologyService;
     private Thread consoleHandlerThread;
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -37,7 +41,10 @@ public class Node {
         this.nodeId = Integer.parseInt(args[0]);
         this.isLeader = nodeId == 5;
         this.setUpNodeNetworkProperties(nodeId);
+        this.topologyService = new TopologyService(this, client.getMyNeighbours());
+        this.client.setTopologyService(topologyService);
     }
+
 
     private void startConsoleHandler() {
         consoleHandlerThread = new Thread(consoleHandlerService);
@@ -45,10 +52,10 @@ public class Node {
     }
 
     public void startServer() throws IOException {
-        int port = this.client.myAddress().port();
+        int port = this.client.getMyAddress().port();
 
         server = ServerBuilder.forPort(port)
-                .addService(new ServerImpl(this))
+                .addService(new ServerImpl(this, topologyService))
                 .build()
                 .start();
 
@@ -74,17 +81,12 @@ public class Node {
         Address myAddress = new Address(Constants.HOSTNAME, generatedPort, this.getNodeId());
         DSNeighbours myNeighbours = new DSNeighbours(myAddress);
 
-        client = new Client(
-                myAddress,
-                myNeighbours,
-                this
-        );
-
+        client = new Client(myAddress, myNeighbours, this);
         client.joinNetworkTopology();
     }
 
     public void printStatus() {
         log.info(String.format("Node id: %d", nodeId));
-        log.info(client.myNeighbours().toString());
+        log.info(client.getMyNeighbours().toString());
     }
 }

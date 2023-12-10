@@ -5,10 +5,14 @@ import com.dsva.exception.NodeNotFoundException;
 import com.dsva.model.Address;
 import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
+import com.dsva.pattern.builder.RequestBuilder;
+import com.dsva.service.TopologyService;
 import com.dsva.util.Utils;
 import com.proto.chat_bully.*;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
@@ -16,7 +20,19 @@ import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
-public record Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) {
+public class Client {
+
+    @Getter private final Address myAddress;
+    @Getter private final DSNeighbours myNeighbours;
+    private final Node myNode;
+    @Setter private TopologyService topologyService;
+
+    public Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) {
+        this.myAddress = myAddress;
+        this.myNeighbours = myNeighbours;
+        this.myNode = myNode;
+    }
+
     public void sendMessageViaLeader(int receiverNodeId, String message) throws NodeNotFoundException {
         boolean viaLeader = !this.myNode.isLeader();
         boolean messageSent = false;
@@ -68,15 +84,32 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) 
         log.warn("Failed to join network topology after trying all known nodes.");
     }
 
+    public void sendCurrentTopology(int joiningNodeId) {
+        if (!myNode.isLeader()) {
+            return;
+        }
+
+        for (Address address : myNeighbours.getKnownNodes()) {
+            if (address.nodeId() != joiningNodeId) {
+                try {
+                    topologyService.updateNodeTopology(address);
+                } catch (NodeNotFoundException e) {
+                    log.error("Node not found: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
 
     private boolean sendGrpcMessage(int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
         int targetNodeId = viaLeader ? myNeighbours.getLeaderAddress().nodeId() : receiverNodeId;
         int targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
-        ManagedChannel channel = buildManagedChannel(targetNodePort);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
 
         try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
-            MessageRequest request = buildMessageRequest(message, senderNodeId, receiverNodeId);
+            MessageRequest request = RequestBuilder.buildMessageRequest(message, senderNodeId, receiverNodeId);
+
             MessageResponse messageResponse = stub.sendMessage(request);
 
             if (messageResponse.getAck()) {
@@ -104,10 +137,11 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) 
 
     private boolean joinNetworkTopology(int expectedNodeIdToBeAlive) {
         int targetNodePort = Utils.getNodePortFromNodeId(expectedNodeIdToBeAlive);
-        ManagedChannel channel = buildManagedChannel(targetNodePort);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
         NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
 
-        JoinRequest request = buildJoinRequest();
+        JoinRequest request = RequestBuilder.buildJoinRequest(this.myAddress.port(), myNode.getNodeId());
+
         JoinResponse response;
 
         try {
@@ -125,43 +159,18 @@ public record Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) 
         }
     }
 
-    private JoinRequest buildJoinRequest() {
-        return JoinRequest.newBuilder()
-                .setHostname(Constants.HOSTNAME)
-                .setPort(this.myAddress.port())
-                .setNodeId(myNode.getNodeId())
-                .build();
-    }
-
     private void setUpDSNeighbours(com.proto.chat_bully.Address leader, AvailableNodesAddressesList availableNodesAddressesList) {
         log.info("Setting up new neighbours. New leader myNode ID: {}", leader.getNodeId());
         // TODO check if ID is higher
-        myNeighbours.setLeaderAddress(convertProtoModelToModelAddress(leader));
+        myNeighbours.setLeaderAddress(Utils.convertProtoModelToModelAddress(leader));
 
         HashSet<Address> knownNodes = new HashSet<>();
         for (com.proto.chat_bully.Address protoAddress : availableNodesAddressesList.getAddressesList()) {
-            knownNodes.add(convertProtoModelToModelAddress(protoAddress));
+            knownNodes.add(Utils.convertProtoModelToModelAddress(protoAddress));
         }
 
         log.info("Updated neighbours: {}", knownNodes);
         myNeighbours.setKnownNodes(knownNodes);
     }
 
-    private Address convertProtoModelToModelAddress(com.proto.chat_bully.Address protoAddress) {
-        return new Address(protoAddress.getHostname(), protoAddress.getPort(), protoAddress.getNodeId());
-    }
-
-    private ManagedChannel buildManagedChannel(int targetNodePort) {
-        return ManagedChannelBuilder.forAddress(Constants.HOSTNAME, targetNodePort)
-                .usePlaintext()
-                .build();
-    }
-
-    private MessageRequest buildMessageRequest(String message, int senderNodeId, int receiverNodeId) {
-        return MessageRequest.newBuilder()
-                .setMessage(message)
-                .setSenderId(senderNodeId)
-                .setReceiverId(receiverNodeId)
-                .build();
-    }
 }

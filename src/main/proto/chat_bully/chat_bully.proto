@@ -11,6 +11,7 @@ service Node {
   rpc SendMessage (MessageRequest) returns (MessageResponse) {}
   rpc StartElection (ElectionRequest) returns (ElectionResponse);
   rpc AnnounceLeader (LeaderAnnouncement) returns (google.protobuf.Empty);
+  rpc UpdateTopology (UpdateTopologyRequest) returns (UpdateTopologyResponse);
   rpc Join (JoinRequest) returns (JoinResponse);
 }
 
@@ -56,4 +57,12 @@ message Address {
 
 message AvailableNodesAddressesList {
   repeated Address addresses = 1;
+}
+
+message UpdateTopologyRequest {
+  AvailableNodesAddressesList availableNodesAddressesList = 1;
+}
+
+message UpdateTopologyResponse {
+  bool ack = 1;
 }

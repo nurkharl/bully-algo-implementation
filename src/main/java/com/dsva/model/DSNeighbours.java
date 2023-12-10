@@ -66,7 +66,7 @@ public class DSNeighbours {
     }
 
     public boolean isNodePresent(int nodeId) {
-        return knownNodes.stream().anyMatch(node -> node.nodeId() ==nodeId);
+        return knownNodes.stream().anyMatch(node -> node.nodeId() == nodeId);
     }
 
     private boolean isAddressValid(Address address) {
