@@ -42,4 +42,10 @@ public class RequestBuilder {
                 .setLeaderId(leaderId)
                 .build();
     }
+
+    public static ElectionRequest buildElectionRequest(int candidateNodeId) {
+        return ElectionRequest.newBuilder()
+                .setNodeId(candidateNodeId)
+                .build();
+    }
 }

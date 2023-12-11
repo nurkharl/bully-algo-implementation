@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Getter
@@ -84,8 +85,13 @@ public class DSNeighbours {
         }
 
         availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myPort, myNodeId));
-
         return availableNodesAddressesList.build();
+    }
+
+    public HashSet<Address> getHigherNodes(int myNodeId) {
+        return knownNodes.stream()
+                .filter(address -> address.nodeId() > myNodeId)
+                .collect(Collectors.toCollection(HashSet::new));
     }
 
     private boolean isAddressValid(Address address) {
@@ -93,7 +99,6 @@ public class DSNeighbours {
             log.warn("Attempted to add null or invalid address to known nodes.");
             return false;
         }
-
         return true;
     }
 }

@@ -40,7 +40,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
         int candidateId = request.getNodeId();
 
         ElectionResponse electionResponse = ElectionResponse.newBuilder()
-                .setAck(candidateId <= myNode.getNodeId())
+                .setAck(candidateId >= myNode.getNodeId())
                 .build();
 
         Utils.sendAcknowledgment(responseObserver, electionResponse);

@@ -15,10 +15,13 @@ import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -27,10 +30,7 @@ public class LeaderElectionService {
     private final Node myNode;
 
     public void initiateElection() {
-        List<Integer> higherNodes = myNeighbours.getKnownNodes().stream()
-                .map(Address::nodeId)
-                .filter(nodeId -> nodeId > myNode.getNodeId())
-                .toList();
+        HashSet<Address> higherNodes = myNeighbours.getHigherNodes(myNode.getNodeId());
 
         if (higherNodes.isEmpty()) {
             becomeLeader();
@@ -40,8 +40,8 @@ public class LeaderElectionService {
         CountDownLatch latch = new CountDownLatch(higherNodes.size());
         AtomicBoolean higherNodeFound = new AtomicBoolean(false);
 
-        for (Integer nodeId : higherNodes) {
-            checkIfNodeIsAlive(nodeId, alive -> {
+        for (Address nodeAddress : higherNodes) {
+            sendLeaderElectionMessage(nodeAddress.nodeId(), alive -> {
                 if (Boolean.TRUE.equals(alive)) {
                     higherNodeFound.set(true);
                 }
@@ -60,7 +60,7 @@ public class LeaderElectionService {
         }
     }
 
-    public void checkIfNodeIsAlive(int targetNodeId, MessagePassingQueue.Consumer<Boolean> onResult) {
+    private void sendLeaderElectionMessage(int targetNodeId, MessagePassingQueue.Consumer<Boolean> onResult) {
         int targetNodePort;
         try {
             targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
@@ -69,37 +69,34 @@ public class LeaderElectionService {
             return;
         }
         ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
-
         NodeGrpc.NodeStub stub = NodeGrpc.newStub(channel)
                 .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.SECONDS);
-        AliveRequest request = RequestBuilder.buildAliveRequest(myNode.getNodeId());
+        ElectionRequest electionRequest = RequestBuilder.buildElectionRequest(myNode.getNodeId());
 
-        stub.isNodeAlive(request, new StreamObserver<>() {
+        stub.startElection(electionRequest, new StreamObserver<>() {
             @Override
-            public void onNext(AliveResponse aliveResponse) {
-                if (aliveResponse.getAck()) {
-                    log.info("Node with id: {} is still alive", targetNodeId);
+            public void onNext(ElectionResponse electionResponse) {
+                if (electionResponse.getAck()) {
+                    log.info("I have higher node id: {} that target node: {}. I can continue election process", myNode.getNodeId(), targetNodeId);
                     onResult.accept(true);
                 } else {
-                    log.error("Health checking failed or false ack received.");
+                    log.info("There is a node with a higher id than me! I need to stop leader election.");
                     onResult.accept(false);
                 }
             }
 
             @Override
             public void onError(Throwable t) {
-                log.error("Error checking if node {} is alive: {}", targetNodeId, t.toString());
+                log.error("Error during leader election process to node:{}, error: {}", targetNodeId, t.toString());
                 onResult.accept(false);
             }
 
-
             @Override
             public void onCompleted() {
-                channel.shutdownNow();
+                channel.shutdown();
             }
         });
     }
-
 
     private void becomeLeader() {
         myNode.setLeader(true);
@@ -135,5 +132,4 @@ public class LeaderElectionService {
             log.error("Error announcing leadership to node {}: {}", address.nodeId(), e.getMessage());
         }
     }
-
 }

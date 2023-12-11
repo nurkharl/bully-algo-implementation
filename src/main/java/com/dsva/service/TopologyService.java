@@ -11,10 +11,12 @@ import com.dsva.pattern.builder.ResponseBuilder;
 import com.dsva.util.Utils;
 import com.proto.chat_bully.*;
 import io.grpc.ManagedChannel;
+import io.grpc.netty.shaded.io.netty.util.internal.shaded.org.jctools.queues.MessagePassingQueue;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class TopologyService {
@@ -54,7 +56,7 @@ public class TopologyService {
         int targetNodePort = myNeighbours.getTargetNodePort(address.nodeId());
         ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
 
-        try  {
+        try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             UpdateTopologyRequest request = RequestBuilder.buildUpdateTopologyRequest(
                     myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(), this.myNode.getNodeId()));
@@ -69,6 +71,56 @@ public class TopologyService {
             channel.shutdown();
         }
     }
+
+    public void checkNodeHealthAndHandleFailure(int targetNodeId) {
+        for (int i = 0; i < Constants.MAX_RETRIES; i++) {
+            checkIfNodeIsAlive(targetNodeId, isAlive -> {
+                if (Boolean.FALSE.equals(isAlive)) {
+                    log.info("Node with id: {} does not respond. Need to delete this node from topology", targetNodeId);
+                }
+            });
+            Utils.sleep();
+        }
+    }
+
+    private void checkIfNodeIsAlive(int targetNodeId, MessagePassingQueue.Consumer<Boolean> onResult) {
+        int targetNodePort;
+        try {
+            targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
+        } catch (NodeNotFoundException e) {
+            log.error(e.getMessage());
+            return;
+        }
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        NodeGrpc.NodeStub stub = NodeGrpc.newStub(channel)
+                .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.SECONDS);
+        AliveRequest request = RequestBuilder.buildAliveRequest(myNode.getNodeId());
+
+        stub.isNodeAlive(request, new StreamObserver<>() {
+            @Override
+            public void onNext(AliveResponse aliveResponse) {
+                if (aliveResponse.getAck()) {
+                    log.info("Node with id: {} is still alive", targetNodeId);
+                    onResult.accept(true);
+                } else {
+                    log.error("Health checking failed or false ack received.");
+                    onResult.accept(false);
+                }
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                log.error("Error checking if node {} is alive: {}", targetNodeId, t.toString());
+                onResult.accept(false);
+            }
+
+            @Override
+            public void onCompleted() {
+                channel.shutdownNow();
+            }
+        });
+    }
+
 
     private boolean isValidJoinRequest(JoinRequest request) {
         int joiningNodeId = request.getPort() - Constants.DEFAULT_PORT;

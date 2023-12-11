@@ -5,7 +5,9 @@ import com.dsva.model.Constants;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class Utils {
 
     private Utils() {
@@ -29,5 +31,14 @@ public class Utils {
         return ManagedChannelBuilder.forAddress(Constants.HOSTNAME, targetNodePort)
                 .usePlaintext()
                 .build();
+    }
+
+    public static void sleep() {
+        try {
+            Thread.sleep(Constants.MAX_ACCEPTABLE_DELAY);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Thread interrupted during retry delay", e);
+        }
     }
 }

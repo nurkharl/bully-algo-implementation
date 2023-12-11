@@ -52,12 +52,7 @@ public class Client {
             messageSent = messageService.sendGrpcMessage(receiverNodeId, myNode.getNodeId(), message, viaLeader);
             if (!messageSent) {
                 log.warn("Retrying message send. Attempt: {}", retryCount + 1);
-                try {
-                    Thread.sleep(Constants.MAX_ACCEPTABLE_DELAY);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("Thread interrupted during retry delay", e);
-                }
+                Utils.sleep();
             }
             retryCount++;
         }
@@ -69,8 +64,8 @@ public class Client {
     }
 
     public void distributeMessage(int receiverNodeId, int senderNodeId, String message) throws NodeNotFoundException {
-        if (messageService.sendGrpcMessage(receiverNodeId, senderNodeId, message, false)) {
-            // TODO
+        if (!messageService.sendGrpcMessage(receiverNodeId, senderNodeId, message, false)) {
+            topologyService.checkNodeHealthAndHandleFailure(receiverNodeId);
         }
     }
 

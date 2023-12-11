@@ -19,13 +19,13 @@ public class MessageService {
 
     private final DSNeighbours myNeighbours;
 
-     public boolean sendGrpcMessage( int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
+    public boolean sendGrpcMessage(int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
         int targetNodeId = viaLeader ? myNeighbours.getLeaderAddress().nodeId() : receiverNodeId;
         int targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
         ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
 
         try {
-                NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
+            NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             MessageRequest request = RequestBuilder.buildMessageRequest(message, senderNodeId, receiverNodeId);
 
             MessageResponse messageResponse = stub.sendMessage(request);
