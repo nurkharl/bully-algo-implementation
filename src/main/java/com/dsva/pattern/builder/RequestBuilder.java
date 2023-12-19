@@ -48,4 +48,10 @@ public class RequestBuilder {
                 .setNodeId(candidateNodeId)
                 .build();
     }
+
+    public static QuitTopologyRequest buildQuitTopologyRequest(int senderNodeId) {
+        return QuitTopologyRequest.newBuilder()
+                .setSenderNodeId(senderNodeId)
+                .build();
+    }
 }

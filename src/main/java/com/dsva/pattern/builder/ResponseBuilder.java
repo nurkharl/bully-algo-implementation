@@ -15,6 +15,12 @@ public class ResponseBuilder {
                 .build();
     }
 
+    public static JoinResponse buildJoinResponse(boolean ack) {
+        return JoinResponse.newBuilder()
+                .setAck(ack)
+                .build();
+    }
+
     public static MessageResponse buildMessageResponse(boolean ack) {
         return MessageResponse.newBuilder()
                 .setAck(ack)
@@ -29,6 +35,18 @@ public class ResponseBuilder {
 
     public static LeaderAnnouncementResponse buildLeaderAnnouncementResponse(boolean ack) {
         return LeaderAnnouncementResponse.newBuilder()
+                .setAck(ack)
+                .build();
+    }
+
+    public static QuitTopologyResponse buildQuitTopologyResponse(boolean ack) {
+        return QuitTopologyResponse.newBuilder()
+                .setAck(ack)
+                .build();
+    }
+
+    public static UpdateTopologyResponse buildUpdateTopologyResponse(boolean ack) {
+        return UpdateTopologyResponse.newBuilder()
                 .setAck(ack)
                 .build();
     }

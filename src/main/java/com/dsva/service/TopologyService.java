@@ -5,7 +5,6 @@ import com.dsva.exception.NodeNotFoundException;
 import com.dsva.model.Address;
 import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
-import com.dsva.pattern.builder.ProtoModelBuilder;
 import com.dsva.pattern.builder.RequestBuilder;
 import com.dsva.pattern.builder.ResponseBuilder;
 import com.dsva.util.Utils;
@@ -15,8 +14,9 @@ import io.grpc.netty.shaded.io.netty.util.internal.shaded.org.jctools.queues.Mes
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class TopologyService {
@@ -36,15 +36,15 @@ public class TopologyService {
         processJoinRequest(request, responseObserver);
     }
 
-    public void updateTopology(AvailableNodesAddressesList addressesToAdd) {
+    public void updateTopology(AvailableNodesAddressesList addressesToAdd, StreamObserver<UpdateTopologyResponse> responseObserver) {
+        ConcurrentHashMap<Integer, Address> knownNodes = new ConcurrentHashMap<>();
         addressesToAdd.getAddressesList().forEach(protoAddress -> {
             Address address = Utils.convertProtoModelToModelAddress(protoAddress);
-            if (myNeighbours.isNodePresent(address)) {
-                log.info("You are adding address that already exist in topology.");
-            }
-            myNeighbours.addNewNode(address);
-            log.info("Processed node for topology update: {}", address);
+            knownNodes.put(address.nodeId(), address);
         });
+        this.myNeighbours.setKnownNodes(knownNodes);
+        log.info("Node's topology updated:\n {}", knownNodes);
+        Utils.sendAcknowledgment(responseObserver, ResponseBuilder.buildUpdateTopologyResponse(true));
     }
 
     public void addNewNodeToTopology(JoinRequest request) {
@@ -57,11 +57,12 @@ public class TopologyService {
         ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
 
         try {
-            NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
+            NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel)
+                    .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.MILLISECONDS);
             UpdateTopologyRequest request = RequestBuilder.buildUpdateTopologyRequest(
-                    myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(), this.myNode.getNodeId()));
+                    myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(), this.myNode.getNodeId(), address.nodeId()));
             UpdateTopologyResponse response = stub.updateTopology(request);
-
+            log.info("Sending updateTopology req to " + address);
             if (!response.getAck()) {
                 log.error("Network topology delivery failed or false ack received for node {}", address.nodeId());
             }
@@ -72,14 +73,48 @@ public class TopologyService {
         }
     }
 
-    public void checkNodeHealthAndHandleFailure(int targetNodeId) {
+    public void removeNodeFromTopology(QuitTopologyRequest request, StreamObserver<QuitTopologyResponse> responseObserver) {
+        QuitTopologyResponse response;
+        if (!isValidQuitRequest(request)) {
+            log.error("Node received invalid quit topology request: {}", request);
+            response = ResponseBuilder.buildQuitTopologyResponse(false);
+        } else {
+            myNode.getClient().getMyNeighbours().removeNode(request.getSenderNodeId());
+            response = ResponseBuilder.buildQuitTopologyResponse(true);
+        }
+        Utils.sendAcknowledgment(responseObserver, response);
+    }
+
+    public boolean checkNodeHealthAndHandleFailure(int targetNodeId) {
+        AtomicBoolean isNodeAlive = new AtomicBoolean(false);
+
         for (int i = 0; i < Constants.MAX_RETRIES; i++) {
             checkIfNodeIsAlive(targetNodeId, isAlive -> {
                 if (Boolean.FALSE.equals(isAlive)) {
-                    log.info("Node with id: {} does not respond. Need to delete this node from topology", targetNodeId);
+                    log.info("Node with id: {} does not respond", targetNodeId);
+                    isNodeAlive.set(false);
+                } else {
+                    isNodeAlive.set(true);
                 }
             });
             Utils.sleep();
+        }
+
+        if (!isNodeAlive.get()) {
+            log.info("Node didn't respond for {} times. Deleting node from the topology", Constants.MAX_RETRIES);
+            myNode.getClient().getMyNeighbours().removeNode(targetNodeId);
+            log.info("Sending updateTopology to remaining nodes...");
+            for (Address address : myNeighbours.getKnownNodes().values()) {
+                try {
+                    this.updateNodeTopology(address);
+                } catch (NodeNotFoundException e) {
+                    log.error("Node not found: {}", e.getMessage());
+                }
+            }
+            return false;
+        } else {
+            log.info("Node with id: {} is alive", targetNodeId);
+            return true;
         }
     }
 
@@ -119,32 +154,36 @@ public class TopologyService {
                 channel.shutdownNow();
             }
         });
+
+        channel.shutdown();
     }
 
 
     private boolean isValidJoinRequest(JoinRequest request) {
-        int joiningNodeId = request.getPort() - Constants.DEFAULT_PORT;
-        return myNode.getNodeId() != joiningNodeId && myNode.getNodeId() >= 1 &&
-                !myNeighbours.isNodePresent(joiningNodeId);
+        return myNode.getNodeId() != request.getNodeId() && request.getPort() > Constants.DEFAULT_PORT;
+    }
+
+    private boolean isValidQuitRequest(QuitTopologyRequest request) {
+        int nodeIdToRemove = request.getSenderNodeId();
+        return myNode.getClient().getMyNeighbours().isNodePresent(nodeIdToRemove);
     }
 
     private void processJoinRequest(JoinRequest request, StreamObserver<JoinResponse> responseObserver) {
         this.addNewNodeToTopology(request);
-        sendPositiveAcknowledgment(responseObserver);
         myNode.getClient().sendCurrentTopology(request.getNodeId());
+        sendPositiveAcknowledgment(responseObserver, request.getNodeId());
     }
 
-    private void sendPositiveAcknowledgment(StreamObserver<JoinResponse> responseObserver) {
+    private void sendPositiveAcknowledgment(StreamObserver<JoinResponse> responseObserver, int senderId) {
         JoinResponse joinResponse = ResponseBuilder.buildJoinResponse(true,
                 myNeighbours.getCurrentProtoLeader(),
-                myNeighbours.getCurrentAvailableNodesProtoAddresses(myNode.getClient().getMyAddress().port(), myNode.getNodeId())
+                myNeighbours.getCurrentAvailableNodesProtoAddresses(myNode.getClient().getMyAddress().port(), myNode.getNodeId(), senderId)
         );
         Utils.sendAcknowledgment(responseObserver, joinResponse);
     }
 
     private void sendNegativeAcknowledgment(StreamObserver<JoinResponse> responseObserver) {
-        JoinResponse joinResponse = ResponseBuilder.buildJoinResponse(false, null, null);
+        JoinResponse joinResponse = ResponseBuilder.buildJoinResponse(false);
         Utils.sendAcknowledgment(responseObserver, joinResponse);
     }
-
 }

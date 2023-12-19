@@ -2,7 +2,6 @@ package com.dsva.model;
 
 import com.dsva.exception.NodeNotFoundException;
 import com.dsva.pattern.builder.ProtoModelBuilder;
-import com.dsva.util.Utils;
 import com.proto.chat_bully.AvailableNodesAddressesList;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -11,7 +10,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
-import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -19,69 +18,74 @@ import java.util.stream.Collectors;
 @Setter
 @AllArgsConstructor
 public class DSNeighbours {
-    private HashSet<Address> knownNodes;
+    private ConcurrentHashMap<Integer, Address> knownNodes;
     private Address leaderAddress;
 
     public DSNeighbours(Address leaderAddress) {
         this.leaderAddress = leaderAddress;
-        this.knownNodes = new HashSet<>();
+        this.knownNodes = new ConcurrentHashMap<>();
     }
 
     @Override
     public String toString() {
-        return "BullyNodeInfo{" +
-                ", knownNodes=" + knownNodes +
-                ",\n leaderId=" + leaderAddress +
-                '}';
+        String reset = "\u001B[0m";
+        String colorGreen = "\u001B[32m";
+        String colorYellow = "\u001B[33m";
+        String colorCyan = "\u001B[36m";
+
+        return colorCyan + "Current Topology:\n" + reset +
+                colorGreen + "Known Nodes: " + reset +
+                knownNodes + "\n" +
+                colorYellow + "Leader: " + reset +
+                leaderAddress;
     }
 
-    public int getTargetNodePort(Integer nodeId) throws NodeNotFoundException {
-        int expectedTargetPort = Utils.getNodePortFromNodeId(nodeId);
 
-        for (Address address : knownNodes) {
-            if (Objects.equals(address.port(), expectedTargetPort)) {
-                return expectedTargetPort;
-            }
+    public int getTargetNodePort(Integer nodeId) throws NodeNotFoundException {
+        Address address = knownNodes.get(nodeId);
+
+        if (address != null) {
+            return address.port();
         }
 
-        throw new NodeNotFoundException("Trying to access not existing target port: " + expectedTargetPort);
+        throw new NodeNotFoundException("Trying to access not existing node: " + nodeId);
     }
 
     public void addNewNode(@NonNull Address address) {
         if (isAddressValid(address)) {
-            knownNodes.add(address);
+            knownNodes.put(address.nodeId(), address);
             log.info("Adding new Node{hostname:{}, port:{}, nodeId:{}}",
                     address.hostname(), address.port(), address.nodeId());
-            log.info("Topology after adding: {}", knownNodes);
+            log.info("Topology after adding: {}", knownNodes.values());
         }
     }
 
-    public void removeNode(@NonNull Address address) {
-        if (isAddressValid(address)) {
-            knownNodes.remove(address);
-            log.info("Removing myNode{hostname:{}, port:{}, nodeId:{}}",
-                    address.hostname(), address.port(), address.nodeId());
+    public void removeNode(@NonNull Integer nodeId) {
+        if (isNodeIdValid(nodeId) && knownNodes.containsKey(nodeId)) {
+            knownNodes.remove(nodeId);
+            log.info("Node with id: {} was successfully removed. Current topology:\n{}", nodeId, knownNodes);
         }
     }
 
     public boolean isNodePresent(Address nodeAddress) {
-        return knownNodes.contains(nodeAddress);
+        return knownNodes.containsValue(nodeAddress);
     }
 
     public boolean isNodePresent(int nodeId) {
-        return knownNodes.stream().anyMatch(node -> node.nodeId() == nodeId);
+        return knownNodes.containsKey(nodeId);
     }
 
     public com.proto.chat_bully.Address getCurrentProtoLeader() {
         return ProtoModelBuilder.buildProtoLeader(this);
     }
 
-    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses(int myPort, int myNodeId) {
-        HashSet<Address> currentAddresses = getKnownNodes();
+    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses(int myPort, int myNodeId, int senderNodId) {
         AvailableNodesAddressesList.Builder availableNodesAddressesList = AvailableNodesAddressesList.newBuilder();
 
-        for (Address nodeAddress : currentAddresses) {
-            availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
+        for (Address nodeAddress : knownNodes.values()) {
+            if (nodeAddress.nodeId() != senderNodId) {
+                availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
+            }
         }
 
         availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myPort, myNodeId));
@@ -89,16 +93,20 @@ public class DSNeighbours {
     }
 
     public HashSet<Address> getHigherNodes(int myNodeId) {
-        return knownNodes.stream()
+        return knownNodes.values().stream()
                 .filter(address -> address.nodeId() > myNodeId)
                 .collect(Collectors.toCollection(HashSet::new));
     }
 
     private boolean isAddressValid(Address address) {
-        if (address.port() < 1 && address.nodeId() < 0) {
+        if (address.port() < 1 || !isNodeIdValid(address.nodeId())) {
             log.warn("Attempted to add null or invalid address to known nodes.");
             return false;
         }
         return true;
+    }
+
+    private boolean isNodeIdValid(int nodeId) {
+        return nodeId >= 0;
     }
 }

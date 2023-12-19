@@ -38,12 +38,16 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
     @Override
     public void startElection(ElectionRequest request, StreamObserver<ElectionResponse> responseObserver) {
         int candidateId = request.getNodeId();
-
+        boolean isCandidateIdHigher = candidateId >= myNode.getNodeId();
         ElectionResponse electionResponse = ElectionResponse.newBuilder()
-                .setAck(candidateId >= myNode.getNodeId())
+                .setAck(isCandidateIdHigher)
                 .build();
 
         Utils.sendAcknowledgment(responseObserver, electionResponse);
+
+        if (!isCandidateIdHigher) {
+            myNode.getClient().initiateElection();
+        }
     }
 
     @Override
@@ -75,12 +79,17 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
     @Override
     public void updateTopology(UpdateTopologyRequest request, StreamObserver<UpdateTopologyResponse> responseObserver) {
+        log.info("Received update topology request from node id: {}",
+                myNode.getClient().getMyNeighbours().getLeaderAddress().nodeId());
         if (this.myNode.isLeader()) {
             return;
         }
 
-        topologyService.updateTopology(request.getAvailableNodesAddressesList());
+        topologyService.updateTopology(request.getAvailableNodesAddressesList(), responseObserver);
     }
 
-
+    @Override
+    public void quitTopology(QuitTopologyRequest request, StreamObserver<QuitTopologyResponse> responseObserver) {
+        topologyService.removeNodeFromTopology(request, responseObserver);
+    }
 }

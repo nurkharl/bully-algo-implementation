@@ -11,8 +11,6 @@ import io.grpc.ManagedChannel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.TimeUnit;
-
 @Slf4j
 @RequiredArgsConstructor
 public class MessageService {
@@ -42,13 +40,7 @@ public class MessageService {
             return false;
         } finally {
             channel.shutdown();
-
-            try {
-                channel.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.error("Interrupted while waiting for the channel to terminate", e);
-            }
+            Utils.awaitChannelTermination(channel);
         }
     }
 }

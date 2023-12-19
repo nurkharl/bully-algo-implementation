@@ -1,10 +1,7 @@
 package com.dsva.service;
 
 import com.dsva.Node;
-import com.dsva.pattern.command.CommandHandler;
-import com.dsva.pattern.command.HelpCommandHandler;
-import com.dsva.pattern.command.SendClientMessageCommandHandler;
-import com.dsva.pattern.command.StatusCommandHandler;
+import com.dsva.pattern.command.*;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -36,8 +33,9 @@ public class ConsoleHandlerService implements Runnable {
 
     private void initializeCommands() {
         commandHandlers.put("?", new HelpCommandHandler());
-        commandHandlers.put("h", new SendClientMessageCommandHandler());
-        commandHandlers.put("s", new StatusCommandHandler());
+        commandHandlers.put("send", new SendClientMessageCommandHandler());
+        commandHandlers.put("status", new StatusCommandHandler());
+        commandHandlers.put("quitTopologyWithNotification", new QuitCommandHandler());
     }
 
     private void parseCommandLine(String commandline) {
@@ -54,7 +52,7 @@ public class ConsoleHandlerService implements Runnable {
     @Override
     public void run() {
         handleCommand("?", new String[]{});
-        System.out.println("You are myNode with id: " + node.getNodeId());
+        System.out.println("You are node with id: " + node.getNodeId());
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
             while (true) {
                 System.out.print(System.lineSeparator() + "cmd > ");

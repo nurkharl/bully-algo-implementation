@@ -2,6 +2,7 @@ package com.dsva.pattern.command;
 
 import com.dsva.Node;
 import com.dsva.exception.NodeNotFoundException;
+import com.dsva.util.Utils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
@@ -13,7 +14,7 @@ public class SendClientMessageCommandHandler implements CommandHandler {
 
     @Override
     public void handle(String[] arguments, Node node) {
-        if (!areArgumentsValid(arguments)) {
+        if (!Utils.areArgumentsValid(arguments, EXPECTED_ARGUMENTS)) {
             return;
         }
 
@@ -30,16 +31,9 @@ public class SendClientMessageCommandHandler implements CommandHandler {
         } catch (NumberFormatException e) {
             log.error("Node ID should be number! Try again!");
         } catch (NodeNotFoundException e) {
-            System.out.println("You are trying to send a message to a Node not existing in this topology. Print s to see available nodes.");
+            System.out.println("You are trying to send a message to a Node not existing in this topology." +
+                    " Print status to see available nodes.");
         }
     }
 
-    private boolean areArgumentsValid(String[] arguments) {
-        if (arguments.length < EXPECTED_ARGUMENTS) {
-            log.error("Insufficient arguments. Expected {}, but received {}: {}",
-                    EXPECTED_ARGUMENTS, arguments.length, Arrays.toString(arguments));
-            return false;
-        }
-        return true;
-    }
 }

@@ -7,6 +7,9 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+
 @Slf4j
 public class Utils {
 
@@ -41,4 +44,23 @@ public class Utils {
             log.error("Thread interrupted during retry delay", e);
         }
     }
+
+    public static void awaitChannelTermination(ManagedChannel channel) {
+        try {
+            channel.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while waiting for the channel to terminate", e);
+        }
+    }
+
+    public static boolean areArgumentsValid(String[] arguments, int expectedArguments) {
+        if (arguments.length != expectedArguments) {
+            log.error("Insufficient arguments. Expected {}, but received {}: {}",
+                    expectedArguments, arguments.length, Arrays.toString(arguments));
+            return false;
+        }
+        return true;
+    }
+
 }

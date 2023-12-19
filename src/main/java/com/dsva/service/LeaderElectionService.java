@@ -16,12 +16,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -78,10 +75,10 @@ public class LeaderElectionService {
             public void onNext(ElectionResponse electionResponse) {
                 if (electionResponse.getAck()) {
                     log.info("I have higher node id: {} that target node: {}. I can continue election process", myNode.getNodeId(), targetNodeId);
-                    onResult.accept(true);
+                    onResult.accept(false);
                 } else {
                     log.info("There is a node with a higher id than me! I need to stop leader election.");
-                    onResult.accept(false);
+                    onResult.accept(true);
                 }
             }
 
@@ -102,12 +99,15 @@ public class LeaderElectionService {
         myNode.setLeader(true);
         announceLeadership();
         myNode.getClient().getMyNeighbours().setLeaderAddress(myNode.getClient().getMyAddress());
+        myNeighbours.removeNode(myNeighbours.getLeaderAddress().nodeId());
         log.info("Your node with honor became a leader! Glory to the new leader!");
+        log.info(myNeighbours.toString());
     }
 
     private void announceLeadership() {
-        for (Address address : myNeighbours.getKnownNodes()) {
-            if (address.nodeId() < myNode.getNodeId()) {
+        log.info("Announcing leadership");
+        for (Address address : myNeighbours.getKnownNodes().values()) {
+            if (address.nodeId() != myNode.getNodeId()) {
                 announceLeadershipToNode(address);
             }
         }
@@ -115,8 +115,8 @@ public class LeaderElectionService {
 
     private void announceLeadershipToNode(Address address) {
         int targetNodePort = Utils.getNodePortFromNodeId(address.nodeId());
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
         try {
-            ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             LeaderAnnouncementRequest request = RequestBuilder.buildLeaderAnnouncementRequest(myNode.getNodeId());
             LeaderAnnouncementResponse response = stub.announceLeader(request);
@@ -130,6 +130,9 @@ public class LeaderElectionService {
             log.error("gRPC error announcing leadership to node {}: {}", address.nodeId(), e.getStatus());
         } catch (Exception e) {
             log.error("Error announcing leadership to node {}: {}", address.nodeId(), e.getMessage());
+        } finally {
+            channel.shutdown();
+            Utils.awaitChannelTermination(channel);
         }
     }
 }

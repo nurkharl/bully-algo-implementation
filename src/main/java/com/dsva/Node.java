@@ -86,7 +86,7 @@ public class Node {
     }
 
     public void printStatus() {
-        log.info(String.format("Node id: %d", nodeId));
-        log.info(client.getMyNeighbours().toString());
+        System.out.println(String.format("Node id: %d", nodeId));
+        System.out.println(client.getMyNeighbours().toString());
     }
 }
