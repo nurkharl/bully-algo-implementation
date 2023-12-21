@@ -22,6 +22,27 @@ public class ConsoleHandlerService implements Runnable {
         initializeCommands();
     }
 
+    @Override
+    public void run() {
+        handleCommand("?", new String[]{});
+        System.out.println("You are node with id: " + node.getNodeId());
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
+            while (true) {
+                System.out.print(System.lineSeparator() + "cmd > ");
+                String commandline = reader.readLine();
+                if (commandline == null) {
+                    log.info("Exit from console handler.");
+                    break;
+                }
+                parseCommandLine(commandline.trim());
+            }
+        } catch (IOException e) {
+            log.error("Something went wrong while reading input from console.");
+        }
+        log.info("Closing ConsoleHandler.");
+    }
+
+
     private void handleCommand(String command, String[] arguments) {
         CommandHandler handler = commandHandlers.get(command);
         if (handler != null) {
@@ -35,7 +56,7 @@ public class ConsoleHandlerService implements Runnable {
         commandHandlers.put("?", new HelpCommandHandler());
         commandHandlers.put("send", new SendClientMessageCommandHandler());
         commandHandlers.put("status", new StatusCommandHandler());
-        commandHandlers.put("quitTopologyWithNotification", new QuitCommandHandler());
+        commandHandlers.put("quit", new QuitCommandHandler());
     }
 
     private void parseCommandLine(String commandline) {
@@ -47,28 +68,5 @@ public class ConsoleHandlerService implements Runnable {
 
     private void unknownCommand() {
         log.info("Unrecognized command.");
-    }
-
-    @Override
-    public void run() {
-        handleCommand("?", new String[]{});
-        System.out.println("You are node with id: " + node.getNodeId());
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
-            while (true) {
-                System.out.print(System.lineSeparator() + "cmd > ");
-
-                String commandline = reader.readLine();
-                if (commandline == null || commandline.equalsIgnoreCase("exit")) {
-                    log.info("Exit from console handler.");
-                    break;
-                }
-
-                parseCommandLine(commandline.trim());
-
-            }
-        } catch (IOException e) {
-            log.error("Something went wrong while reading input from console.");
-        }
-        log.info("Closing ConsoleHandler.");
     }
 }

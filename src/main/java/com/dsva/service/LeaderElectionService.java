@@ -27,6 +27,10 @@ public class LeaderElectionService {
     private final Node myNode;
 
     public void initiateElection() {
+        if (myNode.isLeader()) {
+            return;
+        }
+
         HashSet<Address> higherNodes = myNeighbours.getHigherNodes(myNode.getNodeId());
 
         if (higherNodes.isEmpty()) {
@@ -95,17 +99,23 @@ public class LeaderElectionService {
         });
     }
 
-    private void becomeLeader() {
+    public void becomeLeader() {
+        if (myNode.isLeader()) {
+            return;
+        }
         myNode.setLeader(true);
         announceLeadership();
-        myNode.getClient().getMyNeighbours().setLeaderAddress(myNode.getClient().getMyAddress());
         myNeighbours.removeNode(myNeighbours.getLeaderAddress().nodeId());
-        log.info("Your node with honor became a leader! Glory to the new leader!");
+        myNeighbours.setLeaderAddress(myNode.getClient().getMyAddress());
+        log.info("Your node  became a leader!");
         log.info(myNeighbours.toString());
     }
 
     private void announceLeadership() {
         log.info("Announcing leadership");
+        if (myNeighbours.getKnownNodes().size() == 0) {
+            log.info("No node is available to announce a leadership.");
+        }
         for (Address address : myNeighbours.getKnownNodes().values()) {
             if (address.nodeId() != myNode.getNodeId()) {
                 announceLeadershipToNode(address);

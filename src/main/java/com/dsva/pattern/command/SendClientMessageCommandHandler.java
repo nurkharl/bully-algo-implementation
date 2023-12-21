@@ -27,7 +27,7 @@ public class SendClientMessageCommandHandler implements CommandHandler {
                 return;
             }
 
-            node.getClient().sendMessageViaLeader(nodeId, message);
+            node.getClient().sendMessage(nodeId, message);
         } catch (NumberFormatException e) {
             log.error("Node ID should be number! Try again!");
         } catch (NodeNotFoundException e) {

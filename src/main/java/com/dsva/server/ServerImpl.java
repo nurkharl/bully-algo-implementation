@@ -4,6 +4,7 @@ import com.dsva.Node;
 import com.dsva.exception.NodeNotFoundException;
 import com.dsva.model.Address;
 import com.dsva.model.Constants;
+import com.dsva.model.NodeState;
 import com.dsva.pattern.builder.ResponseBuilder;
 import com.dsva.service.TopologyService;
 import com.dsva.util.Utils;
@@ -37,7 +38,13 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
     @Override
     public void startElection(ElectionRequest request, StreamObserver<ElectionResponse> responseObserver) {
+
+        if (myNode.getNodeState() == NodeState.QUITING) {
+            return;
+        }
+
         int candidateId = request.getNodeId();
+        log.info("Received ElectionRequest from candidate: {}", candidateId);
         boolean isCandidateIdHigher = candidateId >= myNode.getNodeId();
         ElectionResponse electionResponse = ElectionResponse.newBuilder()
                 .setAck(isCandidateIdHigher)
@@ -46,6 +53,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
         Utils.sendAcknowledgment(responseObserver, electionResponse);
 
         if (!isCandidateIdHigher) {
+            log.info("My ID is higher than candidate's. I stop his election and take charge.");
             myNode.getClient().initiateElection();
         }
     }
@@ -68,6 +76,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
     @Override
     public void isNodeAlive(AliveRequest request, StreamObserver<AliveResponse> responseObserver) {
+        log.info("Received AliveRequest from {}", request.getSenderNodeID());
         Utils.sendAcknowledgment(responseObserver, ResponseBuilder.buildALiveResponse(true));
     }
 
@@ -90,6 +99,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
 
     @Override
     public void quitTopology(QuitTopologyRequest request, StreamObserver<QuitTopologyResponse> responseObserver) {
+        log.info("Received QuitTopologyRequest.");
         topologyService.removeNodeFromTopology(request, responseObserver);
     }
 }

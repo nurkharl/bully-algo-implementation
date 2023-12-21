@@ -64,11 +64,10 @@ public class DSNeighbours {
         if (isNodeIdValid(nodeId) && knownNodes.containsKey(nodeId)) {
             knownNodes.remove(nodeId);
             log.info("Node with id: {} was successfully removed. Current topology:\n{}", nodeId, knownNodes);
+        } else {
+            log.warn("Cannot remove node with id {}", nodeId);
+            log.warn(toString());
         }
-    }
-
-    public boolean isNodePresent(Address nodeAddress) {
-        return knownNodes.containsValue(nodeAddress);
     }
 
     public boolean isNodePresent(int nodeId) {

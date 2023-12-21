@@ -12,6 +12,8 @@ import com.proto.chat_bully.*;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.shaded.io.netty.util.internal.shaded.org.jctools.queues.MessagePassingQueue;
 import io.grpc.stub.StreamObserver;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,14 +21,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
+@RequiredArgsConstructor
 public class TopologyService {
     private final Node myNode;
     private final DSNeighbours myNeighbours;
-
-    public TopologyService(Node myNode, DSNeighbours myNeighbours) {
-        this.myNode = myNode;
-        this.myNeighbours = myNeighbours;
-    }
+    @Setter private LeaderElectionService leaderElectionService;
 
     public void joinTopology(JoinRequest request, StreamObserver<JoinResponse> responseObserver) {
         if (!isValidJoinRequest(request)) {
@@ -78,11 +77,19 @@ public class TopologyService {
         if (!isValidQuitRequest(request)) {
             log.error("Node received invalid quit topology request: {}", request);
             response = ResponseBuilder.buildQuitTopologyResponse(false);
+            Utils.sendAcknowledgment(responseObserver, response);
         } else {
             myNode.getClient().getMyNeighbours().removeNode(request.getSenderNodeId());
+            if (myNode.isLeader()) {
+                updateAllNodesTopologyKnowledge();
+            }
             response = ResponseBuilder.buildQuitTopologyResponse(true);
+            Utils.sendAcknowledgment(responseObserver, response);
+            if (request.getSenderNodeId() == myNode.getClient().getLeaderAddress().nodeId()) {
+                log.info("Leader logged out from the topology! Currently there is no leader. Start leader election");
+                leaderElectionService.initiateElection();
+            }
         }
-        Utils.sendAcknowledgment(responseObserver, response);
     }
 
     public boolean checkNodeHealthAndHandleFailure(int targetNodeId) {
@@ -102,19 +109,26 @@ public class TopologyService {
 
         if (!isNodeAlive.get()) {
             log.info("Node didn't respond for {} times. Deleting node from the topology", Constants.MAX_RETRIES);
-            myNode.getClient().getMyNeighbours().removeNode(targetNodeId);
-            log.info("Sending updateTopology to remaining nodes...");
-            for (Address address : myNeighbours.getKnownNodes().values()) {
-                try {
-                    this.updateNodeTopology(address);
-                } catch (NodeNotFoundException e) {
-                    log.error("Node not found: {}", e.getMessage());
-                }
-            }
+            myNeighbours.removeNode(targetNodeId);
+            updateAllNodesTopologyKnowledge();
             return false;
         } else {
             log.info("Node with id: {} is alive", targetNodeId);
             return true;
+        }
+    }
+
+    public void updateAllNodesTopologyKnowledge() {
+        log.info("Sending updateTopology to remaining nodes...");
+        for (Address address : myNeighbours.getKnownNodes().values()) {
+            try {
+                this.updateNodeTopology(address);
+            } catch (NodeNotFoundException e) {
+                log.error("Node not found: {}", e.getMessage());
+            }
+        }
+        if (myNeighbours.getKnownNodes().size() == 0) {
+            log.info("No node is available to update its' topology knowledge.");
         }
     }
 

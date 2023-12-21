@@ -17,7 +17,6 @@ import com.proto.chat_bully.JoinResponse;
 import com.proto.chat_bully.NodeGrpc;
 import io.grpc.ManagedChannel;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,11 +31,9 @@ public class Client {
     @Getter
     private final DSNeighbours myNeighbours;
     private final Node myNode;
-    @Setter
     private TopologyService topologyService;
     private final MessageService messageService;
     private final LeaderElectionService leaderElectionService;
-
     private final ShutdownService shutdownService;
 
     public Client(Address myAddress, DSNeighbours myNeighbours, Node myNode) {
@@ -48,7 +45,7 @@ public class Client {
         this.shutdownService = new ShutdownService(this);
     }
 
-    public void sendMessageViaLeader(int receiverNodeId, String message) throws NodeNotFoundException {
+    public void sendMessage(int receiverNodeId, String message) throws NodeNotFoundException {
         boolean viaLeader = !this.myNode.isLeader();
         boolean messageSent = false;
         int retryCount = 0;
@@ -63,10 +60,16 @@ public class Client {
         }
 
         if (!messageSent) {
-            Address leaderAddress = myNode.getClient().getMyNeighbours().getLeaderAddress();
+            Address leaderAddress = myNeighbours.getLeaderAddress();
             log.error("Failed to send message after {} attempts", Constants.MAX_RETRIES);
-            log.info("Checking if leader is alive...");
-            if(!topologyService.checkNodeHealthAndHandleFailure(leaderAddress.nodeId())) {
+            int nodeIdToCheck = leaderAddress.nodeId();
+            if (leaderAddress.equals(myAddress)) {
+                nodeIdToCheck = receiverNodeId;
+                log.info("Checking if node with id: {} alive", nodeIdToCheck);
+            } else {
+                log.info("Checking if leader is alive...");
+            }
+            if(!topologyService.checkNodeHealthAndHandleFailure(nodeIdToCheck)) {
                 myNode.getClient().myNeighbours.removeNode(leaderAddress.nodeId());
                 initiateElection();
             }
@@ -82,11 +85,7 @@ public class Client {
     }
 
     public void joinNetworkTopology() {
-        if (myNode.getNodeId() == Constants.EXPECTED_ENTRY_POINT_NODE_ID) {
-            log.info("I am the leader. No need to join.");
-            return;
-        }
-
+        log.info("Trying to connect to someone in topology...");
         for (int nodeId = Constants.EXPECTED_ENTRY_POINT_NODE_ID; nodeId > 0; nodeId--) {
             if (nodeId == myNode.getNodeId()) {
                 continue;
@@ -94,11 +93,15 @@ public class Client {
 
             if (joinNetworkTopology(nodeId)) {
                 log.info("Your node: {} joined network topology successfully. Topology:\n {}", myNode.getNodeId(), myNeighbours.toString());
+                if (nodeId < myNode.getNodeId()) {
+                    log.info("However my ID is higher, so I will initiate a leader election process.");
+                    initiateElection();
+                }
                 return;
             }
         }
-
-        log.warn("Failed to join network topology after trying all known nodes.");
+        log.info("I tried to connect to all possible nodes. No one responded. Become a leader.");
+        leaderElectionService.becomeLeader();
     }
 
     public void sendCurrentTopology(int joiningNodeId) {
@@ -121,6 +124,22 @@ public class Client {
         leaderElectionService.initiateElection();
     }
 
+    public void quitTopologyWithNotification(int senderNodeId) {
+        shutdownService.quitTopologyWithNotification(senderNodeId);
+    }
+
+    public void quitTopologyWithoutNotification() {
+        shutdownService.quitTopologyWithoutNotification();
+    }
+
+    public Address getLeaderAddress() {
+        return myNeighbours.getLeaderAddress();
+    }
+
+    public void setTopologyService(TopologyService topologyService) {
+        this.topologyService = topologyService;
+        this.topologyService.setLeaderElectionService(leaderElectionService);
+    }
 
     private boolean joinNetworkTopology(int expectedNodeIdToBeAlive) {
         int targetNodePort = Utils.getNodePortFromNodeId(expectedNodeIdToBeAlive);
@@ -135,6 +154,7 @@ public class Client {
         try {
             response = stub.join(request);
             if (response.getAck()) {
+
                 setUpDSNeighbours(response.getLeader(), response.getAvailableNodesAddressesList());
                 return true;
             } else {
@@ -142,14 +162,16 @@ public class Client {
                 return false;
             }
         } catch (Exception e) {
-            log.error("Error joining network topology through node {}: {}", expectedNodeIdToBeAlive, e.getMessage());
+            log.debug("Cannot connect to node {}: {}", expectedNodeIdToBeAlive, e.getMessage());
             return false;
+        } finally {
+            channel.shutdown();
+            Utils.awaitChannelTermination(channel);
         }
     }
 
     private void setUpDSNeighbours(com.proto.chat_bully.Address leader, AvailableNodesAddressesList availableNodesAddressesList) {
         log.info("Setting up new neighbours. New leader node ID: {}", leader.getNodeId());
-        // TODO check if ID is higher
         myNeighbours.setLeaderAddress(Utils.convertProtoModelToModelAddress(leader));
 
         ConcurrentHashMap<Integer, Address> knownNodes = new ConcurrentHashMap<>();
@@ -160,17 +182,5 @@ public class Client {
 
         log.info("Updated neighbours: {}", knownNodes);
         myNeighbours.setKnownNodes(knownNodes);
-    }
-
-    public void quitTopologyWithNotification(int senderNodeId) {
-        try {
-            shutdownService.quitTopologyWithNotification(senderNodeId);
-        } catch (NodeNotFoundException e) {
-            log.error("Can't find a node with id: {}", senderNodeId);
-        }
-    }
-
-    public void quitTopologyWithoutNotification() {
-        shutdownService.quitTopologyWithoutNotification();
     }
 }

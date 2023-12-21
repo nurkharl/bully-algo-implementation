@@ -4,6 +4,7 @@ import com.dsva.client.Client;
 import com.dsva.model.Address;
 import com.dsva.model.Constants;
 import com.dsva.model.DSNeighbours;
+import com.dsva.model.NodeState;
 import com.dsva.server.ServerImpl;
 import com.dsva.service.ConsoleHandlerService;
 import com.dsva.service.TopologyService;
@@ -26,6 +27,7 @@ public class Node {
     @Getter
     private Client client;
     private final ConsoleHandlerService consoleHandlerService = new ConsoleHandlerService(this);
+    @Getter private NodeState nodeState;
     @Setter
     private TopologyService topologyService;
     private Thread consoleHandlerThread;
@@ -39,10 +41,11 @@ public class Node {
 
     public Node(String[] args) {
         this.nodeId = Integer.parseInt(args[0]);
-        this.isLeader = nodeId == 5;
+        this.isLeader = false;
         this.setUpNodeNetworkProperties(nodeId);
         this.topologyService = new TopologyService(this, client.getMyNeighbours());
         this.client.setTopologyService(topologyService);
+        this.nodeState = NodeState.IDLE;
     }
 
 
@@ -86,7 +89,12 @@ public class Node {
     }
 
     public void printStatus() {
-        System.out.println(String.format("Node id: %d", nodeId));
+        System.out.printf("Node id: %d%n", nodeId);
         System.out.println(client.getMyNeighbours().toString());
+    }
+
+    public void setNodeState(NodeState nodeState) {
+        log.info("Node state has changed from {} to {} ", this.nodeState, nodeState);
+        this.nodeState = nodeState;
     }
 }
