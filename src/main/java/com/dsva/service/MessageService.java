@@ -1,6 +1,7 @@
 package com.dsva.service;
 
 import com.dsva.exception.NodeNotFoundException;
+import com.dsva.model.Address;
 import com.dsva.model.DSNeighbours;
 import com.dsva.pattern.builder.RequestBuilder;
 import com.dsva.util.Utils;
@@ -19,8 +20,8 @@ public class MessageService {
 
     public boolean sendGrpcMessage(int receiverNodeId, int senderNodeId, String message, boolean viaLeader) throws NodeNotFoundException {
         int targetNodeId = viaLeader ? myNeighbours.getLeaderAddress().nodeId() : receiverNodeId;
-        int targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        Address targetNodeAddress = myNeighbours.getTargetNodeAddress(targetNodeId);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodeAddress.port(), targetNodeAddress.hostname());
 
         try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);

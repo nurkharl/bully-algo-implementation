@@ -41,11 +41,11 @@ public class DSNeighbours {
     }
 
 
-    public int getTargetNodePort(Integer nodeId) throws NodeNotFoundException {
+    public Address getTargetNodeAddress(Integer nodeId) throws NodeNotFoundException {
         Address address = knownNodes.get(nodeId);
 
         if (address != null) {
-            return address.port();
+            return address;
         }
 
         throw new NodeNotFoundException("Trying to access not existing node: " + nodeId);
@@ -78,16 +78,16 @@ public class DSNeighbours {
         return ProtoModelBuilder.buildProtoLeader(this);
     }
 
-    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses(int myPort, int myNodeId, int senderNodId) {
+    public AvailableNodesAddressesList getCurrentAvailableNodesProtoAddresses(int myPort, int myNodeId, int senderNodId, String myHostname) {
         AvailableNodesAddressesList.Builder availableNodesAddressesList = AvailableNodesAddressesList.newBuilder();
 
         for (Address nodeAddress : knownNodes.values()) {
             if (nodeAddress.nodeId() != senderNodId) {
-                availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId()));
+                availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(nodeAddress.port(), nodeAddress.nodeId(), nodeAddress.hostname()));
             }
         }
 
-        availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myPort, myNodeId));
+        availableNodesAddressesList.addAddresses(ProtoModelBuilder.buildProtoAddress(myPort, myNodeId, myHostname));
         return availableNodesAddressesList.build();
     }
 

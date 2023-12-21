@@ -2,7 +2,6 @@ package com.dsva.service;
 
 import com.dsva.client.Client;
 import com.dsva.model.Address;
-import com.dsva.model.Constants;
 import com.dsva.pattern.builder.RequestBuilder;
 import com.dsva.util.Utils;
 import com.proto.chat_bully.NodeGrpc;
@@ -23,8 +22,7 @@ public class ShutdownService {
         if (leaderAddress.equals(client.getMyAddress())) {
             quitTopologyAsALeader();
         } else {
-            int targetNodePort = leaderAddress.port();
-            boolean shouldShutdown = sendQuitTopologyRequest(senderNodeId, targetNodePort);
+            boolean shouldShutdown = sendQuitTopologyRequest(senderNodeId, leaderAddress);
             if (shouldShutdown) {
                 log.info("Leader knows I am quiting...");
                 systemExit();
@@ -35,7 +33,7 @@ public class ShutdownService {
     public void quitTopologyAsALeader() {
         log.info("Quiting topology as a leader.");
         boolean shouldShutdown = client.getMyNeighbours().getKnownNodes().values().stream()
-                .anyMatch(address -> sendQuitTopologyRequest(client.getMyAddress().nodeId(), address.port()));
+                .anyMatch(address -> sendQuitTopologyRequest(client.getMyAddress().nodeId(), address));
 
         if (shouldShutdown) {
             log.info("Nodes are aware of my quiting... Bye bye");
@@ -43,9 +41,9 @@ public class ShutdownService {
         }
     }
 
-    private boolean sendQuitTopologyRequest(int senderNodeId, int targetNodePort) {
-        log.info("Sending QuitTopologyRequest to node: {}", targetNodePort - Constants.DEFAULT_PORT);
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+    private boolean sendQuitTopologyRequest(int senderNodeId, Address targetNodeAddress) {
+        log.info("Sending QuitTopologyRequest to node: {}", targetNodeAddress.nodeId());
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodeAddress.port(), targetNodeAddress.hostname());
         try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             QuitTopologyRequest request = RequestBuilder.buildQuitTopologyRequest(senderNodeId);

@@ -40,6 +40,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
     public void startElection(ElectionRequest request, StreamObserver<ElectionResponse> responseObserver) {
 
         if (myNode.getNodeState() == NodeState.QUITING) {
+            // TODO
             return;
         }
 
@@ -64,7 +65,7 @@ public class ServerImpl extends NodeGrpc.NodeImplBase {
         int leaderPort = Constants.DEFAULT_PORT + request.getLeaderId();
 
         Address leaderAddress = new Address(
-                Constants.HOSTNAME,
+                request.getHostname(),
                 leaderPort,
                 request.getLeaderId()
         );

@@ -1,6 +1,5 @@
 package com.dsva.pattern.builder;
 
-import com.dsva.model.Constants;
 import com.proto.chat_bully.*;
 
 public class RequestBuilder {
@@ -17,9 +16,9 @@ public class RequestBuilder {
                 .build();
     }
 
-    public static JoinRequest buildJoinRequest(int senderPort, int senderNodeId) {
+    public static JoinRequest buildJoinRequest(int senderPort, int senderNodeId, String hostname) {
         return JoinRequest.newBuilder()
-                .setHostname(Constants.HOSTNAME)
+                .setHostname(hostname)
                 .setPort(senderPort)
                 .setNodeId(senderNodeId)
                 .build();

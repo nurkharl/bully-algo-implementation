@@ -52,14 +52,15 @@ public class TopologyService {
     }
 
     public void updateNodeTopology(Address address) throws NodeNotFoundException {
-        int targetNodePort = myNeighbours.getTargetNodePort(address.nodeId());
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        Address targetNodeAddress = myNeighbours.getTargetNodeAddress(address.nodeId());
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodeAddress.port(), targetNodeAddress.hostname());
 
         try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel)
                     .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.MILLISECONDS);
             UpdateTopologyRequest request = RequestBuilder.buildUpdateTopologyRequest(
-                    myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(), this.myNode.getNodeId(), address.nodeId()));
+                    myNeighbours.getCurrentAvailableNodesProtoAddresses(this.myNode.getClient().getMyAddress().port(),
+                            this.myNode.getNodeId(), address.nodeId(), this.myNode.getClient().getMyAddress().hostname()));
             UpdateTopologyResponse response = stub.updateTopology(request);
             log.info("Sending updateTopology req to " + address);
             if (!response.getAck()) {
@@ -134,13 +135,16 @@ public class TopologyService {
 
     private void checkIfNodeIsAlive(int targetNodeId, MessagePassingQueue.Consumer<Boolean> onResult) {
         int targetNodePort;
+        String targetNodeHostname;
         try {
-            targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
+            Address targetNodeAddress = myNeighbours.getTargetNodeAddress(targetNodeId);
+            targetNodePort = targetNodeAddress.port();
+            targetNodeHostname = targetNodeAddress.hostname();
         } catch (NodeNotFoundException e) {
             log.error(e.getMessage());
             return;
         }
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort, targetNodeHostname);
         NodeGrpc.NodeStub stub = NodeGrpc.newStub(channel)
                 .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.SECONDS);
         AliveRequest request = RequestBuilder.buildAliveRequest(myNode.getNodeId());
@@ -191,7 +195,7 @@ public class TopologyService {
     private void sendPositiveAcknowledgment(StreamObserver<JoinResponse> responseObserver, int senderId) {
         JoinResponse joinResponse = ResponseBuilder.buildJoinResponse(true,
                 myNeighbours.getCurrentProtoLeader(),
-                myNeighbours.getCurrentAvailableNodesProtoAddresses(myNode.getClient().getMyAddress().port(), myNode.getNodeId(), senderId)
+                myNeighbours.getCurrentAvailableNodesProtoAddresses(myNode.getClient().getMyAddress().port(), myNode.getNodeId(), senderId, myNode.getClient().getMyAddress().hostname())
         );
         Utils.sendAcknowledgment(responseObserver, joinResponse);
     }

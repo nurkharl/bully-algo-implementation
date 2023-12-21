@@ -63,15 +63,18 @@ public class LeaderElectionService {
 
     private void sendLeaderElectionMessage(int targetNodeId, MessagePassingQueue.Consumer<Boolean> onResult) {
         int targetNodePort;
+        String hostname;
         try {
-            targetNodePort = myNeighbours.getTargetNodePort(targetNodeId);
+            Address targetAddress = myNeighbours.getTargetNodeAddress(targetNodeId);
+            targetNodePort = targetAddress.port();
+            hostname = targetAddress.hostname();
         } catch (NodeNotFoundException e) {
             log.error(e.getMessage());
             return;
         }
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort, hostname);
         NodeGrpc.NodeStub stub = NodeGrpc.newStub(channel)
-                .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.SECONDS);
+                .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.MILLISECONDS); // TODO ms
         ElectionRequest electionRequest = RequestBuilder.buildElectionRequest(myNode.getNodeId());
 
         stub.startElection(electionRequest, new StreamObserver<>() {
@@ -125,7 +128,7 @@ public class LeaderElectionService {
 
     private void announceLeadershipToNode(Address address) {
         int targetNodePort = Utils.getNodePortFromNodeId(address.nodeId());
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort, address.hostname());
         try {
             NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel);
             LeaderAnnouncementRequest request = RequestBuilder.buildLeaderAnnouncementRequest(myNode.getNodeId());

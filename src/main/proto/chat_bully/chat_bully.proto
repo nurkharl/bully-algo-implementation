@@ -37,6 +37,7 @@ message ElectionResponse {
 
 message LeaderAnnouncementRequest {
   int32 leaderId = 1;
+  string hostname = 2;
 }
 
 message LeaderAnnouncementResponse {

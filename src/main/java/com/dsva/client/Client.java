@@ -143,11 +143,12 @@ public class Client {
 
     private boolean joinNetworkTopology(int expectedNodeIdToBeAlive) {
         int targetNodePort = Utils.getNodePortFromNodeId(expectedNodeIdToBeAlive);
-        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort);
+        String expectedHostname = Constants.HOSTNAME;
+        ManagedChannel channel = Utils.buildManagedChannel(targetNodePort, expectedHostname);
         NodeGrpc.NodeBlockingStub stub = NodeGrpc.newBlockingStub(channel)
-                .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.SECONDS);
+                .withDeadlineAfter(Constants.MAX_ACCEPTABLE_DELAY, TimeUnit.MILLISECONDS);
 
-        JoinRequest request = RequestBuilder.buildJoinRequest(this.myAddress.port(), myNode.getNodeId());
+        JoinRequest request = RequestBuilder.buildJoinRequest(this.myAddress.port(), myNode.getNodeId(), Constants.HOSTNAME);
 
         JoinResponse response;
 

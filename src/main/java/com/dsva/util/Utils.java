@@ -30,8 +30,8 @@ public class Utils {
         responseObserver.onCompleted();
     }
 
-    public static ManagedChannel buildManagedChannel(int targetNodePort) {
-        return ManagedChannelBuilder.forAddress(Constants.HOSTNAME, targetNodePort)
+    public static ManagedChannel buildManagedChannel(int targetNodePort, String hostname) {
+        return ManagedChannelBuilder.forAddress(hostname, targetNodePort)
                 .usePlaintext()
                 .build();
     }
